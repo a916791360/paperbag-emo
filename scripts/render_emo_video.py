@@ -353,6 +353,80 @@ def _draw_hand_underline(
         draw.line(pts_sub, fill=(*color, int(alpha * 0.42)), width=2, joint="curve")
 
 
+def _wrap_cjk_lines(lines: list[str], max_chars: int = 14) -> list[str]:
+    """Safely wrap overly long copy lines at Chinese punctuation or midpoint."""
+    wrapped: list[str] = []
+    punc = set("，。！？、；：… ")
+    for raw in lines:
+        s = raw.strip()
+        # Count visible CJK/word weight (treat trailing "... ..." softly)
+        effective = len(s.replace(" ", "").replace(".", ""))
+        if effective <= max_chars or len(s) <= max_chars + 2:
+            wrapped.append(raw)
+            continue
+
+        # Recursively split near midpoint while preserving punctuation on left half
+        pending = s
+        while len(pending.replace(" ", "").replace(".", "")) > max_chars:
+            mid = len(pending) // 2
+            best_split = None
+            best_dist = len(pending)
+            for idx in range(max(3, mid - 6), min(len(pending) - 2, mid + 7)):
+                if pending[idx] in punc:
+                    dist = abs(idx - mid)
+                    if dist < best_dist:
+                        best_dist = dist
+                        best_split = idx + 1
+            cut = best_split if best_split is not None else mid
+            left = pending[:cut].rstrip()
+            right = pending[cut:].lstrip()
+            if not right:
+                break
+            wrapped.append(left)
+            pending = right
+        if pending:
+            wrapped.append(pending)
+    return wrapped
+
+
+def _validate_timeline_pacing(compiled_scenes: list[dict[str, Any]], bpm: float) -> list[str]:
+    """Check shot duration, reading speed (chars/sec), and visual diversity."""
+    warnings: list[str] = []
+    beat_sec = 60.0 / bpm
+    prev_sig: tuple[str, str] | None = None
+
+    for idx_s, cs in enumerate(compiled_scenes, 1):
+        shot_dur = cs["end_t"] - cs["start_t"]
+        lines = cs.get("lines", [])
+        chars = sum(len(ln.replace(" ", "").replace(".", "")) for ln in lines)
+        cps = chars / max(0.1, shot_dur)
+
+        if shot_dur > 5.5:
+            warnings.append(
+                f"[PACE HINT] Shot {idx_s} lasts {shot_dur:.1f}s (>5.5s); split into 2 shots for sharper rhythm."
+            )
+        if cps > 5.5:
+            need_beats = max(2, math.ceil((chars / 3.8 + 0.8) / beat_sec))
+            warnings.append(
+                f"[READABILITY HINT] Shot {idx_s} has {chars} chars in {shot_dur:.1f}s ({cps:.1f} chars/s); consider >= {need_beats} beats."
+            )
+
+        vis_src = str(
+            cs.get("_vis_src")
+            or cs.get("scene_image")
+            or (cs.get("scene_frames") or [None])[0]
+            or cs.get("sticker")
+            or (cs.get("frames") or [""])[0]
+        )
+        cur_sig = (vis_src, str(cs.get("camera", "static")))
+        if prev_sig is not None and cur_sig == prev_sig:
+            warnings.append(
+                f"[DIVERSITY HINT] Shot {idx_s} repeats the same visual & camera as Shot {idx_s - 1}; vary shot scale or motion."
+            )
+        prev_sig = cur_sig
+    return warnings
+
+
 def _fit_font_for_line(
     draw: ImageDraw.ImageDraw,
     text: str,
@@ -1312,8 +1386,19 @@ def render_video(
                     sticker_cache[key] = load_and_trim_sticker(resolved)
                 sticker_frames.append(sticker_cache[key])
 
+        max_line_chars = int(sc.get("max_chars_per_line", data.get("max_chars_per_line", 14)))
+        wrapped_lines = _wrap_cjk_lines(list(sc.get("lines", [])), max_chars=max_line_chars)
+
+        vis_src = str(
+            sc.get("scene_image")
+            or (sc.get("scene_frames") or [None])[0]
+            or sc.get("sticker")
+            or (sc.get("frames") or [""])[0]
+        )
         compiled_scenes.append({
             **sc,
+            "_vis_src": vis_src,
+            "lines": wrapped_lines,
             "start_t": start_t,
             "end_t": end_t,
             "beats": beats,
@@ -1325,11 +1410,13 @@ def render_video(
     total_duration = cur_beat * beat_sec
     total_frames = max(1, int(round(total_duration * fps)))
     avg_shot_sec = total_duration / max(1, len(compiled_scenes))
-    print(f"Timeline: {len(compiled_scenes)} shots | {bpm:g} BPM | {total_duration:.2f}s (avg {avg_shot_sec:.2f}s/shot)")
-    for idx_s, cs in enumerate(compiled_scenes, 1):
-        shot_dur = cs["end_t"] - cs["start_t"]
-        if shot_dur > 5.5:
-            print(f"[PACE HINT] Shot {idx_s} lasts {shot_dur:.1f}s (>5.5s); consider splitting into 2 shots for sharper pacing.", file=sys.stderr)
+    total_chars = sum(len(ln.replace(" ", "").replace(".", "")) for cs in compiled_scenes for ln in cs.get("lines", []))
+    print(
+        f"Timeline: {len(compiled_scenes)} shots | {total_chars} chars | "
+        f"{bpm:g} BPM | {total_duration:.2f}s (avg {avg_shot_sec:.2f}s/shot)"
+    )
+    for warn in _validate_timeline_pacing(compiled_scenes, bpm):
+        print(warn, file=sys.stderr)
 
     rng = random.Random(101)
     assets = RenderAssets(
@@ -1495,6 +1582,7 @@ def main() -> None:
     parser.add_argument("--theme", choices=sorted(THEMES.keys()), default=None, help="Override timeline theme")
     parser.add_argument("--bg", type=Path, default=None, help="Optional custom background image")
     parser.add_argument("--check", action="store_true", help="Check ffmpeg and CJK font setup and exit")
+    parser.add_argument("--validate", action="store_true", help="Validate timeline wrapping & pacing without rendering")
     args = parser.parse_args()
 
     if args.check:
@@ -1503,8 +1591,35 @@ def main() -> None:
         print(f"cjk_font: {font or 'NOT FOUND (fallback to default)'}")
         raise SystemExit(0 if ok else 1)
 
+    if args.validate:
+        if not args.timeline:
+            parser.error("--timeline is required with --validate")
+        data = json.loads(args.timeline.read_text(encoding="utf-8"))
+        bpm = float(data.get("bpm", 84))
+        beat_sec = 60.0 / bpm
+        cur_beat = 0.0
+        compiled: list[dict[str, Any]] = []
+        max_c = int(data.get("max_chars_per_line", 14))
+        for sc in data["scenes"]:
+            beats = float(sc.get("beats", 4))
+            compiled.append({
+                **sc,
+                "lines": _wrap_cjk_lines(list(sc.get("lines", [])), max_chars=int(sc.get("max_chars_per_line", max_c))),
+                "start_t": cur_beat * beat_sec,
+                "end_t": (cur_beat + beats) * beat_sec,
+            })
+            cur_beat += beats
+        total_dur = cur_beat * beat_sec
+        print(f"Validated {len(compiled)} shots | {bpm:g} BPM | {total_dur:.2f}s")
+        for idx_s, cs in enumerate(compiled, 1):
+            print(f"  Shot {idx_s} ({cs['end_t'] - cs['start_t']:.2f}s): {cs['lines']}")
+        warnings = _validate_timeline_pacing(compiled, bpm)
+        for w in warnings:
+            print(w, file=sys.stderr)
+        raise SystemExit(0)
+
     if not args.timeline or not args.out:
-        parser.error("--timeline and --out are required unless --check is used")
+        parser.error("--timeline and --out are required unless --check or --validate is used")
 
     silent_mp4, preview_mp4 = render_video(
         args.timeline,
