@@ -167,15 +167,45 @@ gradient, texture, noise, speckles, shadows, floor plane, green/magenta color sp
    - Confirm no green/magenta fringe remains at 100% zoom.
    - Confirm internal kraft-brown, dark charcoal hoodie, white hands, and halftone areas remain 100% opaque (`alpha = 255`).
 
-## Mode C workflow — beat-synced video assembly
+## Mode C workflow — beat-synced Motion Comic video assembly
 
-1. Break the user's Emo copywriting into `3~6` beat-aligned scenes at a fixed BPM (default `84` or `90` BPM for calm emo; `100~120` BPM for rhythmic explainers), keeping each line under 12 Chinese characters.
-2. Reuse matching poses from `assets/stickers/`; generate missing poses via Mode B first.
-3. Write `timeline.json` and render both the Douyin-ready silent MP4 and local beat-preview MP4:
+**Core principles**:
+1. **Bespoke scenes per script (`一文案一分镜`)**: Never lazily reuse the same 3 stock stickers or another script's `studio/scenes/` folder for a new copywriting prompt. Every new script must first extract its own setting, weather, time progression, lighting arc, and concrete props from the copy's semantics.
+2. **Length-driven duration & pacing (`文案定长`)**: Scale scene count and video duration dynamically with copy length (keeping average shot duration `2.0–4.5s` so visuals never stagnate):
+   - **Short quote (≤ 25 Chinese chars / 2–3 lines)**: `3–4` shots · `10–15s` (`4–6` beats/shot).
+   - **Medium monologue (26–65 chars / 4–7 lines)**: `5–8` shots · `16–28s` (`2–4` beats for transitions, `4–6` beats for emotional landings).
+   - **Long narrative (65–130+ chars / 8–14 lines)**: `8–15` shots · `30–55s` (cut every `8–14` chars; mix newly generated hero scenes & object cutaways with B-cam tighter crops on key rooms to preserve visual freshness and style stability).
+3. **Shot scale diversity (`相邻景别轮换`)**: Never place two consecutive shots in the same framing. Alternate across:
+   - `Wide` (establishing space/weather),
+   - `Medium` (character action),
+   - `Object Cutaway` (hands, cold mug, glowing phone, clock, rain window — zero face),
+   - `Close-up` (emotion + blink),
+   - `Back / POV` (release/epilogue).
+4. **Companion & prop micro-interactions**: In addition to protagonist motion (`natural_blink`, `fg_parallax`), give the black cat and scene props subtle life (`cat_zzz`, `purr_waves`, cat blink, `prop_pulse` on phone/clock/lamp, `coffee_steam`, `rain_glass`, `sunbeams`).
+
+### Execution steps
+
+1. Run dependency and cross-platform CJK font self-check if needed:
    ```bash
-   python3 ~/.gemini/config/skills/paperbag-emo/scripts/render_emo_video.py \
+   python3 scripts/render_emo_video.py --check
+   ```
+2. Produce a **Director Breakdown** mapping each copy line to: `shot_scale`, `setting & props`, `lighting`, `beats`, `camera`, `transition`, and `fx`.
+3. Choose visual source per scene:
+   - **Motion Comic full-frame mode (`scene_image` / `scene_frames`) — preferred**: Bespoke 9:16 cinematic keyframes per scene with organic Ken Burns drift, `natural_blink` frame pairs (protagonist + cat when awake), and `light_pos` breathing glow.
+   - **2.5D Parallax split mode (`scene_image` + `fg_image` / `fg_frames`)**: Background environment drifts at `1.0x` while transparent foreground subject moves at `fg_parallax` (`1.45x–1.6x`) with independent `motion` (`sigh_sway`, `alive_idle`).
+   - **Sticker mode (`sticker` / `frames`)**: Cutout pose composition over `late_night` or `paper_cream` theme backdrop.
+4. Configure `timeline.json`:
+   - `theme`: `"late_night"` (charcoal-teal) or `"paper_cream"` (warm journal paper), or provide `"background"` / `--bg` for a custom backdrop image.
+   - Per-scene motion & camera: `motion` (`alive_idle`, `bounce_in`, `beat_nod`, `zoom_punch`, `sigh_sway`, `calm_float`), `camera` (`push_in`, `pull_out`, `drift_diag`, `pan_left`, `pan_right`, `pan_up`, `pan_down`, `breathe`, `static`), and `transition` (`crossfade`, `luma_fade`, `warm_dissolve`, `wipe_up`, `ink_flash`, `cut`).
+   - Sensory & companion micro-effects (`fx`): `coffee_steam` (`steam_pos`), `sunbeams`, `bokeh_depth`, `rain_glass`, `lamp_flicker`, `cat_zzz` (`cat_pos`), `purr_waves` (`cat_pos`), `prop_pulse` (`prop_pos`, `prop_color`), `film_grain`.
+   - Optional layout & narrative cues: `timestamp` (e.g. `"02:15 AM"`), `light_pos` (`[x_ratio, y_ratio]`), `text_pos` (`"top"`, `"bottom"`, `"center"`), and `doodle` (`thought_dots`, `sigh_lines`, `warm_sparks`, `steam_wisps`, `rain_streaks`, `bracket_emphasis`).
+   - Kinetic text (`text_anim`): `typewriter_beat`, `beat_lines`, `word_pop`, `slam_center`, `fade_up`.
+5. Render both the Douyin-ready silent MP4 and local beat-preview MP4:
+   ```bash
+   python3 scripts/render_emo_video.py \
      --timeline timeline.json \
      --out output/video \
+     --theme late_night \
      --fps 30
    ```
 

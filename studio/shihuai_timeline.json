@@ -1,0 +1,48 @@
+{
+  "bpm": 80,
+  "theme": "late_night",
+  "tag": "深夜纸袋人 · 情绪备忘录",
+  "scenes": [
+    {
+      "beats": 4,
+      "lines": [
+        "那天...",
+        "我想了想，"
+      ],
+      "highlight": ["想了想"],
+      "sticker": "assets/stickers/thinking.png",
+      "motion": "bounce_in",
+      "camera": "push_in",
+      "text_anim": "typewriter_beat",
+      "doodle": ["thought_dots"]
+    },
+    {
+      "beats": 8,
+      "lines": [
+        "一个爱我的人",
+        "是不会这样对我的，"
+      ],
+      "highlight": ["爱我的人", "不会这样对我"],
+      "sticker": "assets/stickers/emo_hug.png",
+      "motion": "sigh_sway",
+      "camera": "breathe",
+      "transition": "crossfade",
+      "text_anim": "beat_lines",
+      "doodle": ["sigh_lines", "rain_streaks"]
+    },
+    {
+      "beats": 4,
+      "lines": [
+        "于是，",
+        "我就释怀了... ..."
+      ],
+      "highlight": ["释怀了"],
+      "sticker": "assets/stickers/calm_cup.png",
+      "motion": "calm_float",
+      "camera": "pull_out",
+      "transition": "crossfade",
+      "text_anim": "typewriter_beat",
+      "doodle": ["warm_sparks"]
+    }
+  ]
+}

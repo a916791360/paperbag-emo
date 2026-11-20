@@ -1,0 +1,94 @@
+{
+  "bpm": 76,
+  "theme": "late_night",
+  "tag": "深夜纸袋人 · 情绪电影",
+  "transition_sec": 0.62,
+  "scenes": [
+    {
+      "beats": 4,
+      "timestamp": "01:40 AM",
+      "scene_frames": [
+        "assets/master_ref.jpg",
+        "studio/scenes/shihuai_shot1_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 2.1,
+      "lines": [
+        "那天...",
+        "我想了想，"
+      ],
+      "highlight": ["想了想"],
+      "camera": "push_in",
+      "light_pos": [0.22, 0.58],
+      "cat_pos": [0.71, 0.73],
+      "fx": ["lamp_flicker", "cat_zzz", "film_grain"],
+      "text_anim": "typewriter_beat",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4,
+      "timestamp": "02:15 AM",
+      "scene_image": "studio/scenes/shihuai_shot2.jpg",
+      "lines": [
+        "一个爱我的人"
+      ],
+      "highlight": ["爱我的人"],
+      "camera": "drift_diag",
+      "transition": "crossfade",
+      "prop_pos": [0.70, 0.56],
+      "prop_color": "teal",
+      "fx": ["prop_pulse", "bokeh_depth", "film_grain"],
+      "text_anim": "fade_up",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4,
+      "timestamp": "03:20 AM",
+      "scene_image": "studio/scenes/shihuai_shot3_room.jpg",
+      "fg_frames": [
+        "assets/stickers/emo_hug.png",
+        "assets/stickers/emo_hug_blink.png"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 2.0,
+      "fg_parallax": 1.55,
+      "fg_scale": 1.04,
+      "fg_bottom_y": 1715,
+      "motion": "sigh_sway",
+      "lines": [
+        "是不会这样对我的，"
+      ],
+      "highlight": ["不会这样对我"],
+      "camera": "pan_right",
+      "transition": "luma_fade",
+      "light_pos": [0.26, 0.62],
+      "cat_pos": [0.72, 0.66],
+      "fx": ["purr_waves", "rain_glass", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 6,
+      "timestamp": "06:45 AM",
+      "scene_frames": [
+        "studio/scenes/shihuai_shot4.jpg",
+        "studio/scenes/shihuai_shot4_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 2.3,
+      "lines": [
+        "于是，",
+        "我就释怀了... ..."
+      ],
+      "highlight": ["释怀了"],
+      "camera": "pull_out",
+      "transition": "warm_dissolve",
+      "light_pos": [0.85, 0.52],
+      "steam_pos": [0.54, 0.64],
+      "cat_pos": [0.83, 0.65],
+      "fx": ["coffee_steam", "purr_waves", "sunbeams", "bokeh_depth", "film_grain"],
+      "text_anim": "typewriter_beat",
+      "text_pos": "top"
+    }
+  ]
+}
