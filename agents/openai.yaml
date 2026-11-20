@@ -1,0 +1,4 @@
+interface:
+  display_name: "Paperbag Emo"
+  short_description: "Create Paperbag & Black Cat manga-ink explainers, transparent assets, and beat-synced videos"
+  default_prompt: "Use $paperbag-emo to create a labeled explanatory image, a transparent IP/object illustration asset, or a beat-synced 9:16 emo video in the Paperbag & Black Cat manga-ink style."

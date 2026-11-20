@@ -1,0 +1,5 @@
+.DS_Store
+__pycache__/
+*.pyc
+studio/output/*.mp4
+studio/output/*.png

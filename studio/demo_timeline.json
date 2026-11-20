@@ -1,0 +1,49 @@
+{
+  "bpm": 84,
+  "tag": "深夜纸袋人 · 情绪备忘录",
+  "scenes": [
+    {
+      "beats": 4,
+      "lines": [
+        "有些难过",
+        "其实没必要逢人就讲"
+      ],
+      "highlight": ["逢人就讲"],
+      "sticker": "assets/stickers/thinking.png",
+      "motion": "bounce_in",
+      "text_anim": "beat_lines"
+    },
+    {
+      "beats": 4,
+      "lines": [
+        "毕竟夜里所有的崩溃",
+        "到了天亮都得自己消化"
+      ],
+      "highlight": ["自己消化"],
+      "sticker": "assets/stickers/emo_hug.png",
+      "motion": "sigh_sway",
+      "text_anim": "beat_lines"
+    },
+    {
+      "beats": 4,
+      "lines": [
+        "与其期待别人撑伞",
+        "不如学会和孤独和解"
+      ],
+      "highlight": ["和孤独和解"],
+      "sticker": "assets/stickers/calm_cup.png",
+      "motion": "zoom_punch",
+      "text_anim": "slam_center"
+    },
+    {
+      "beats": 4,
+      "lines": [
+        "晚安，今晚也辛苦了"
+      ],
+      "highlight": ["晚安"],
+      "sticker": "assets/stickers/calm_cup.png",
+      "motion": "calm_float",
+      "text_anim": "fade_up"
+    }
+  ]
+}
