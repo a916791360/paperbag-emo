@@ -1,0 +1,157 @@
+{
+  "bpm": 80,
+  "theme": "late_night",
+  "tag": "深夜纸袋人 · 情绪电影",
+  "transition_sec": 0.56,
+  "scenes": [
+    {
+      "beats": 4,
+      "timestamp": "23:18",
+      "scene_frames": [
+        "studio/scenes/lianxi/s1_sofa.jpg",
+        "studio/scenes/lianxi/s1_sofa_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 2.1,
+      "lines": [
+        "最近看到一句话："
+      ],
+      "highlight": ["一句话"],
+      "camera": "push_in",
+      "prop_pos": [0.41, 0.70],
+      "prop_color": "amber",
+      "cat_pos": [0.74, 0.73],
+      "fx": ["prop_pulse", "cat_zzz", "film_grain"],
+      "text_anim": "typewriter_beat",
+      "text_pos": "top"
+    },
+    {
+      "beats": 6,
+      "timestamp": "23:24",
+      "scene_image": "studio/scenes/lianxi/s2_drops.jpg",
+      "lines": [
+        "你对一个人产生怜惜的话，",
+        "一辈子都跑不掉了。"
+      ],
+      "highlight": ["产生怜惜", "跑不掉了"],
+      "camera": "drift_diag",
+      "transition": "crossfade",
+      "fx": ["rain_glass", "bokeh_depth", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4,
+      "timestamp": "23:31",
+      "scene_frames": [
+        "studio/scenes/lianxi/s3_chest.jpg",
+        "studio/scenes/lianxi/s3_chest_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 2.0,
+      "lines": [
+        "因为感情的最高境界，",
+        "就是心疼。"
+      ],
+      "highlight": ["最高境界", "心疼"],
+      "camera": "push_in",
+      "transition": "crossfade",
+      "light_pos": [0.15, 0.52],
+      "cat_pos": [0.82, 0.77],
+      "fx": ["purr_waves", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 6,
+      "timestamp": "23:45",
+      "scene_image": "studio/scenes/lianxi/s4_street_wide.jpg",
+      "lines": [
+        "不喜欢一个人的话，",
+        "当她遇到不好的事情的时候，"
+      ],
+      "highlight": ["不喜欢一个人"],
+      "camera": "pan_left",
+      "transition": "luma_fade",
+      "fx": ["rain_glass", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4,
+      "timestamp": "23:46",
+      "scene_image": "studio/scenes/lianxi/s5_boundary_cu.jpg",
+      "lines": [
+        "你就想划清界限。"
+      ],
+      "highlight": ["划清界限"],
+      "camera": "push_in",
+      "transition": "crossfade",
+      "fx": ["rain_glass", "film_grain"],
+      "text_anim": "slam_center",
+      "text_pos": "top"
+    },
+    {
+      "beats": 6,
+      "timestamp": "00:08",
+      "scene_image": "studio/scenes/lianxi/s6_rain_halt.jpg",
+      "lines": [
+        "可如果你很喜欢她，",
+        "看到对方出现一点狼狈，"
+      ],
+      "highlight": ["很喜欢她", "一点狼狈"],
+      "camera": "push_in",
+      "transition": "luma_fade",
+      "light_pos": [0.85, 0.40],
+      "fx": ["lamp_flicker", "rain_glass", "bokeh_depth", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4,
+      "timestamp": "00:09",
+      "scene_image": "studio/scenes/lianxi/s7_heartbreak_ecu.jpg",
+      "lines": [
+        "心都会碎，"
+      ],
+      "highlight": ["心都会碎"],
+      "camera": "breathe",
+      "transition": "crossfade",
+      "fx": ["rain_glass", "film_grain"],
+      "text_anim": "slam_center",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4,
+      "timestamp": "00:10",
+      "scene_image": "studio/scenes/lianxi/s8_tilt_action.jpg",
+      "lines": [
+        "甚至脑子都来不及思考，"
+      ],
+      "highlight": ["来不及思考"],
+      "camera": "pan_right",
+      "transition": "crossfade",
+      "steam_pos": [0.74, 0.60],
+      "fx": ["coffee_steam", "rain_glass", "film_grain"],
+      "text_anim": "typewriter_beat",
+      "text_pos": "top"
+    },
+    {
+      "beats": 6,
+      "timestamp": "00:12",
+      "scene_image": "studio/scenes/lianxi/s9_shelter_finale.jpg",
+      "lines": [
+        "心就已经开始疼了。"
+      ],
+      "highlight": ["开始疼了"],
+      "camera": "pull_out",
+      "transition": "warm_dissolve",
+      "light_pos": [0.29, 0.36],
+      "steam_pos": [0.73, 0.62],
+      "cat_pos": [0.64, 0.80],
+      "fx": ["coffee_steam", "purr_waves", "bokeh_depth", "film_grain"],
+      "text_anim": "typewriter_beat",
+      "text_pos": "top"
+    }
+  ]
+}
