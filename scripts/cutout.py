@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 from statistics import median
 
@@ -24,6 +25,7 @@ from PIL import Image
 Color = tuple[int, int, int]
 ALPHA_NOISE_FLOOR = 8
 KEY_DOMINANCE_THRESHOLD = 16
+MAX_IMAGE_PIXELS = 4096 * 4096
 
 
 def _clamp(value: float) -> int:
@@ -48,60 +50,60 @@ def _distance_alpha(distance: int, transparent: float, opaque: float) -> int:
     return _clamp(255 * _smoothstep(ratio))
 
 
-def _key_channels(key: Color) -> list[int]:
+def _key_channels(key: Color) -> tuple[list[int], list[int]]:
     strongest = max(key)
     if strongest < 128:
-        return []
-    return [
+        return [], [0, 1, 2]
+    k_ch = [
         index
         for index, value in enumerate(key)
         if value >= strongest - 16 and value >= 128
     ]
+    other_ch = [index for index in range(3) if index not in k_ch]
+    return k_ch, other_ch
 
 
-def _dominance_alpha(color: Color, key: Color) -> int:
-    key_channels = _key_channels(key)
+def _dominance_alpha(
+    color: Color,
+    key_max: int,
+    key_channels: list[int],
+    other_channels: list[int],
+) -> int:
     if not key_channels:
         return 255
 
-    other_channels = [index for index in range(3) if index not in key_channels]
     key_strength = min(color[index] for index in key_channels)
     other_strength = max((color[index] for index in other_channels), default=0)
     dominance = key_strength - other_strength
     if dominance <= 0:
         return 255
 
-    denominator = max(1, max(key) - other_strength)
+    denominator = max(1, key_max - other_strength)
     return _clamp(255 * (1 - min(1.0, dominance / denominator)))
 
 
-def _key_dominance(color: Color, key: Color) -> int:
-    key_channels = _key_channels(key)
-    if not key_channels:
-        return 0
-    other_channels = [index for index in range(3) if index not in key_channels]
-    key_strength = min(color[index] for index in key_channels)
-    other_strength = max((color[index] for index in other_channels), default=0)
-    return key_strength - other_strength
-
-
-def _looks_key_colored(color: Color, key: Color, distance: int) -> bool:
+def _looks_key_colored(
+    color: Color,
+    distance: int,
+    key_channels: list[int],
+    other_channels: list[int],
+) -> bool:
     if distance <= 32:
         return True
-    if not _key_channels(key):
-        return True
-    return _key_dominance(color, key) >= KEY_DOMINANCE_THRESHOLD
-
-
-def _despill(color: Color, key: Color, alpha: int) -> Color:
-    if alpha >= 252:
-        return color
-
-    key_channels = _key_channels(key)
     if not key_channels:
-        return color
-    other_channels = [index for index in range(3) if index not in key_channels]
-    if not other_channels:
+        return True
+    key_strength = min(color[index] for index in key_channels)
+    other_strength = max((color[index] for index in other_channels), default=0)
+    return (key_strength - other_strength) >= KEY_DOMINANCE_THRESHOLD
+
+
+def _despill(
+    color: Color,
+    alpha: int,
+    key_channels: list[int],
+    other_channels: list[int],
+) -> Color:
+    if alpha >= 252 or not key_channels or not other_channels:
         return color
 
     channels = list(color)
@@ -141,10 +143,18 @@ def remove_background(
     non_key_opaque_threshold: float = 115,
     despill: bool = True,
 ) -> tuple[Color, int, int]:
-    image = Image.open(input_path).convert("RGBA")
+    with Image.open(input_path) as raw_img:
+        width, height = raw_img.size
+        if width <= 0 or height <= 0 or width * height > MAX_IMAGE_PIXELS:
+            raise ValueError(f"Invalid or oversized image dimensions: {width}x{height}")
+        image = raw_img.convert("RGBA")
+
     key = _sample_border_key(image)
+    key_channels, other_channels = _key_channels(key)
+    key_max = max(key)
+    non_key_eff_opaque = min(opaque_threshold, non_key_opaque_threshold)
+
     pixels = image.load()
-    width, height = image.size
     transparent_count = 0
     partial_count = 0
 
@@ -153,17 +163,18 @@ def remove_background(
             red, green, blue, source_alpha = pixels[x, y]
             color = (red, green, blue)
             distance = _distance(color, key)
-            key_like = _looks_key_colored(color, key, distance)
-            effective_opaque = (
-                opaque_threshold if key_like else min(opaque_threshold, non_key_opaque_threshold)
-            )
+            key_like = _looks_key_colored(color, distance, key_channels, other_channels)
+            effective_opaque = opaque_threshold if key_like else non_key_eff_opaque
             alpha = _distance_alpha(
                 distance,
                 transparent_threshold,
                 effective_opaque,
             )
             if key_like:
-                alpha = min(alpha, _dominance_alpha(color, key))
+                alpha = min(
+                    alpha,
+                    _dominance_alpha(color, key_max, key_channels, other_channels),
+                )
             alpha = _clamp(alpha * (source_alpha / 255))
             if alpha <= ALPHA_NOISE_FLOOR:
                 pixels[x, y] = (0, 0, 0, 0)
@@ -171,13 +182,20 @@ def remove_background(
                 continue
 
             if despill and key_like:
-                red, green, blue = _despill(color, key, alpha)
+                red, green, blue = _despill(color, alpha, key_channels, other_channels)
             pixels[x, y] = (red, green, blue, alpha)
             if alpha < 255:
                 partial_count += 1
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    image.save(output_path)
+    tmp_path = output_path.with_name(f".{output_path.stem}.{os.getpid()}.tmp.png")
+    try:
+        image.save(tmp_path, format="PNG")
+        os.replace(tmp_path, output_path)
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink(missing_ok=True)
+
     return key, transparent_count, partial_count
 
 

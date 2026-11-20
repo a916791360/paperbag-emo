@@ -5,7 +5,7 @@ No external LLM, image, or video API keys required.
 Supports:
   - Cross-platform CJK font auto-detection (macOS / Windows / Linux) & FFmpeg self-check
   - Themes: late_night (charcoal-teal) and paper_cream (warm journal paper), plus --bg custom images
-  - Multi-frame sprite animation ("frames") and procedural secondary motion ("motion")
+  - Multi-frame sprite animation ("frames" / "scene_frames") and 2.5D parallax ("fg_frames")
   - Camera push/pull ("camera"), scene transitions ("transition"), hand-drawn underlines & mood doodles
   - Beat-synced kinetic typography: typewriter_beat, beat_lines, word_pop, slam_center, fade_up
 
@@ -17,9 +17,11 @@ Outputs both:
 from __future__ import annotations
 
 import argparse
+import functools
 import glob
 import json
 import math
+import os
 import random
 import shutil
 import struct
@@ -37,6 +39,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 WIDTH = 1080
 HEIGHT = 1920
 HORIZON_Y = 1648
+MAX_IMAGE_PIXELS = 4096 * 4096
 
 
 @dataclass(frozen=True)
@@ -157,6 +160,7 @@ def _platform_font_candidates() -> list[str]:
                     ["fc-match", ":lang=zh", "-f", "%{file}"],
                     text=True,
                     stderr=subprocess.DEVNULL,
+                    timeout=3,
                 ).strip()
                 if out:
                     candidates.insert(0, out)
@@ -182,6 +186,7 @@ def resolve_font_path(explicit_path: str | None = None) -> str | None:
     return None
 
 
+@functools.lru_cache(maxsize=64)
 def load_font(resolved_path: str | None, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     if resolved_path:
         try:
@@ -216,14 +221,24 @@ def check_environment(explicit_font: str | None = None) -> tuple[bool, str | Non
     return True, font_path
 
 
+def _safe_open_rgba(path: Path, max_pixels: int = MAX_IMAGE_PIXELS) -> Image.Image:
+    with Image.open(path) as raw_img:
+        w, h = raw_img.size
+        if w <= 0 or h <= 0 or w * h > max_pixels:
+            raise ValueError(f"Invalid or oversized image ({w}x{h}) at {path}")
+        return raw_img.convert("RGBA")
+
+
 def _cover_resize(img: Image.Image, target_w: int, target_h: int) -> Image.Image:
     src_w, src_h = img.size
+    if src_w <= 0 or src_h <= 0:
+        raise ValueError(f"Invalid image dimensions: {src_w}x{src_h}")
     scale = max(target_w / src_w, target_h / src_h)
-    new_w = int(round(src_w * scale))
-    new_h = int(round(src_h * scale))
+    new_w = max(1, int(round(src_w * scale)))
+    new_h = max(1, int(round(src_h * scale)))
     resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-    left = (new_w - target_w) // 2
-    top = (new_h - target_h) // 2
+    left = max(0, (new_w - target_w) // 2)
+    top = max(0, (new_h - target_h) // 2)
     return resized.crop((left, top, left + target_w, top + target_h))
 
 
@@ -235,7 +250,7 @@ def build_base_backdrop(
 ) -> Image.Image:
     """Pre-bake backdrop (theme gradient or custom image), paper grain, and desk horizon."""
     if bg_image_path is not None:
-        raw_bg = Image.open(bg_image_path).convert("RGBA")
+        raw_bg = _safe_open_rgba(bg_image_path)
         img = _cover_resize(raw_bg, WIDTH, HEIGHT)
         scrim_col = (*theme.bg_bottom, max(0, min(230, bg_scrim_alpha)))
         scrim = Image.new("RGBA", (WIDTH, HEIGHT), scrim_col)
@@ -256,11 +271,9 @@ def build_base_backdrop(
             for gx in range(72, WIDTH - 60, 54):
                 for gy in range(120, HEIGHT - 120, 54):
                     gdraw.ellipse([gx - 1, gy - 1, gx + 1, gy + 1], fill=(138, 128, 114, 42))
-            # Subtle vertical journal margin rule
             gdraw.line([(86, 90), (86, HEIGHT - 90)], fill=(198, 130, 108, 45), width=2)
             img = Image.alpha_composite(img, grid)
 
-    # Subtle paper speckle grain
     rng = random.Random(seed)
     grain_layer = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
     grain_draw = ImageDraw.Draw(grain_layer)
@@ -272,7 +285,6 @@ def build_base_backdrop(
         grain_draw.point((gx, gy), fill=(tone, tone, tone, rng.randint(a_lo, a_hi)))
     img = Image.alpha_composite(img, grain_layer)
 
-    # Subtle comic desk horizon line near lower third
     horizon = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
     hdraw = ImageDraw.Draw(horizon)
     hc = theme.horizon_color
@@ -297,25 +309,60 @@ def build_warm_glow(theme: ThemePalette, radius: int = 440) -> Image.Image:
 
 
 def load_and_trim_sticker(path: Path, target_max_w: int = 760, target_max_h: int = 760) -> Image.Image:
-    img = Image.open(path).convert("RGBA")
+    img = _safe_open_rgba(path)
     bbox = img.getbbox()
     if bbox:
         img = img.crop(bbox)
     w, h = img.size
+    if w <= 0 or h <= 0:
+        raise ValueError(f"Sticker image is empty after trim: {path}")
     scale = min(target_max_w / w, target_max_h / h)
     new_size = (max(1, int(round(w * scale))), max(1, int(round(h * scale))))
     return img.resize(new_size, Image.Resampling.LANCZOS)
 
 
-def resolve_asset_path(raw: str, base_dir: Path, skill_dir: Path) -> Path:
-    p = Path(raw)
-    if p.is_file():
-        return p
-    for root in (base_dir, skill_dir):
-        candidate = root / raw
-        if candidate.is_file():
-            return candidate
+def resolve_asset_path(
+    raw: str,
+    base_dir: Path,
+    skill_dir: Path,
+    allow_external: bool = False,
+) -> Path:
+    if not raw or not str(raw).strip():
+        raise ValueError("Empty asset path in timeline")
+    raw_path = Path(str(raw))
+    allowed_roots = [base_dir.resolve(), skill_dir.resolve()]
+
+    candidates: list[Path] = []
+    if raw_path.is_absolute():
+        candidates.append(raw_path)
+    else:
+        candidates.extend([base_dir / raw_path, skill_dir / raw_path, raw_path])
+
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except Exception:
+            continue
+        if not allow_external and not any(resolved.is_relative_to(root) for root in allowed_roots):
+            raise ValueError(f"Asset path escapes allowed workspace roots: {raw}")
+        if resolved.is_file():
+            return resolved
     raise FileNotFoundError(f"Asset not found: {raw}")
+
+
+def _parse_pos_pair(raw: Any, default: tuple[float, float], field_name: str = "pos") -> tuple[float, float]:
+    if raw is None:
+        return default
+    if not isinstance(raw, (list, tuple)) or len(raw) != 2:
+        raise ValueError(f"Field '{field_name}' must be a [x_ratio, y_ratio] pair, got: {raw!r}")
+    try:
+        x = float(raw[0])
+        y = float(raw[1])
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Field '{field_name}' contains non-numeric coordinates: {raw!r}") from exc
+    if not (math.isfinite(x) and math.isfinite(y)):
+        raise ValueError(f"Field '{field_name}' contains non-finite coordinates: {raw!r}")
+    return max(-0.5, min(1.5, x)), max(-0.5, min(1.5, y))
 
 
 def _draw_hand_underline(
@@ -353,35 +400,80 @@ def _draw_hand_underline(
         draw.line(pts_sub, fill=(*color, int(alpha * 0.42)), width=2, joint="curve")
 
 
-def _wrap_cjk_lines(lines: list[str], max_chars: int = 14) -> list[str]:
-    """Safely wrap overly long copy lines at Chinese punctuation or midpoint."""
+def _is_inside_highlight(text: str, cut_idx: int, highlights: list[str] | None) -> bool:
+    if not highlights:
+        return False
+    for kw in highlights:
+        if not kw:
+            continue
+        start = 0
+        while True:
+            pos = text.find(kw, start)
+            if pos == -1:
+                break
+            if pos < cut_idx < pos + len(kw):
+                return True
+            start = pos + 1
+    return False
+
+
+def _wrap_cjk_lines(
+    lines: list[str],
+    max_chars: int = 14,
+    highlights: list[str] | None = None,
+) -> list[str]:
+    """Safely wrap overly long copy lines at Chinese punctuation or midpoint without infinite loops."""
+    max_chars = max(4, int(max_chars))
     wrapped: list[str] = []
     punc = set("，。！？、；：… ")
+
     for raw in lines:
+        if not isinstance(raw, str):
+            raw = str(raw)
         s = raw.strip()
-        # Count visible CJK/word weight (treat trailing "... ..." softly)
+        if not s:
+            continue
         effective = len(s.replace(" ", "").replace(".", ""))
         if effective <= max_chars or len(s) <= max_chars + 2:
             wrapped.append(raw)
             continue
 
-        # Recursively split near midpoint while preserving punctuation on left half
         pending = s
-        while len(pending.replace(" ", "").replace(".", "")) > max_chars:
-            mid = len(pending) // 2
+        while len(pending.replace(" ", "").replace(".", "")) > max_chars and len(pending) > 1:
+            mid = max(1, min(len(pending) - 1, len(pending) // 2))
             best_split = None
-            best_dist = len(pending)
-            for idx in range(max(3, mid - 6), min(len(pending) - 2, mid + 7)):
-                if pending[idx] in punc:
-                    dist = abs(idx - mid)
-                    if dist < best_dist:
-                        best_dist = dist
-                        best_split = idx + 1
-            cut = best_split if best_split is not None else mid
+            best_score = 10**9
+            lo = max(1, mid - 6)
+            hi = min(len(pending) - 1, mid + 7)
+            for idx in range(lo, hi):
+                if pending[idx] in punc and idx + 1 < len(pending):
+                    cand = idx + 1
+                    penalty = 100 if _is_inside_highlight(pending, cand, highlights) else 0
+                    score = abs(idx - mid) + penalty
+                    if score < best_score:
+                        best_score = score
+                        best_split = cand
+
+            if best_split is None:
+                # Choose cut near mid that avoids splitting inside a highlight keyword
+                best_split = mid
+                for offset in range(0, 6):
+                    for cand in (mid - offset, mid + offset):
+                        if 1 <= cand < len(pending) and not _is_inside_highlight(pending, cand, highlights):
+                            best_split = cand
+                            break
+                    else:
+                        continue
+                    break
+
+            cut = max(1, min(len(pending) - 1, best_split))
             left = pending[:cut].rstrip()
             right = pending[cut:].lstrip()
-            if not right:
-                break
+            if not left or not right or len(right) >= len(pending):
+                hard_cut = max(1, min(len(pending) - 1, max_chars))
+                wrapped.append(pending[:hard_cut])
+                pending = pending[hard_cut:]
+                continue
             wrapped.append(left)
             pending = right
         if pending:
@@ -390,7 +482,7 @@ def _wrap_cjk_lines(lines: list[str], max_chars: int = 14) -> list[str]:
 
 
 def _validate_timeline_pacing(compiled_scenes: list[dict[str, Any]], bpm: float) -> list[str]:
-    """Check shot duration, reading speed (chars/sec), and visual diversity."""
+    """Check shot duration, reading speed (chars/sec), visual diversity, and highlight integrity."""
     warnings: list[str] = []
     beat_sec = 60.0 / bpm
     prev_sig: tuple[str, str] | None = None
@@ -410,6 +502,12 @@ def _validate_timeline_pacing(compiled_scenes: list[dict[str, Any]], bpm: float)
             warnings.append(
                 f"[READABILITY HINT] Shot {idx_s} has {chars} chars in {shot_dur:.1f}s ({cps:.1f} chars/s); consider >= {need_beats} beats."
             )
+
+        for kw in cs.get("highlight", []) or []:
+            if kw and not any(kw in ln for ln in lines):
+                warnings.append(
+                    f"[HIGHLIGHT HINT] Shot {idx_s} highlight '{kw}' not found in wrapped lines {lines}."
+                )
 
         vis_src = str(
             cs.get("_vis_src")
@@ -434,7 +532,7 @@ def _fit_font_for_line(
     base_size: int,
     max_width: int = WIDTH - 140,
 ) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    size = base_size
+    size = max(34, int(base_size))
     while size >= 34:
         font = load_font(font_path, size)
         bbox = draw.textbbox((0, 0), text, font=font)
@@ -466,7 +564,6 @@ def draw_highlighted_line(
     total_w = full_box[2] - full_box[0]
     start_x = center_x - total_w // 2
 
-    # Build character-level highlight mask from full text so partial typewriter reveals stay color-stable
     hi_mask = [False] * len(text)
     idx = 0
     while idx < len(text):
@@ -517,7 +614,7 @@ def draw_highlighted_line(
 
 
 def draw_mood_doodles(
-    layer: Image.Image,
+    draw: ImageDraw.ImageDraw,
     doodles: list[str],
     t: float,
     local_beat: float,
@@ -525,10 +622,9 @@ def draw_mood_doodles(
     sticker_box: tuple[int, int, int, int],
     theme: ThemePalette,
 ) -> None:
-    """Draw editorial manga-ink doodles around the character or upper frame."""
+    """Draw editorial manga-ink doodles around the character or upper frame onto an existing ImageDraw."""
     if not doodles:
         return
-    draw = ImageDraw.Draw(layer)
     sx, sy, sw, sh = sticker_box
     ink = theme.text_primary if theme.name == "paper_cream" else (232, 228, 220)
     amber = theme.accent_primary
@@ -536,7 +632,6 @@ def draw_mood_doodles(
 
     for kind in doodles:
         if kind == "thought_dots":
-            # Three drifting manga ellipsis dots above right of character head
             base_x = sx + int(sw * 0.78)
             base_y = sy + int(sh * 0.14)
             for i in range(3):
@@ -549,7 +644,6 @@ def draw_mood_doodles(
                 draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(*amber, alpha), outline=(*ink, alpha), width=2)
 
         elif kind == "sigh_lines":
-            # Subtle hand-drawn sigh wisps near shoulder
             base_x = sx + int(sw * 0.14)
             base_y = sy + int(sh * 0.32)
             breath = 0.5 + 0.5 * math.sin(local_beat * math.pi * 0.5)
@@ -561,7 +655,6 @@ def draw_mood_doodles(
                 draw.line(pts, fill=(*teal, alpha), width=4, joint="curve")
 
         elif kind == "warm_sparks":
-            # Gentle 4-point manga star sparkles in outer negative space (never over character)
             anchors = [
                 (max(70, sx + int(sw * 0.05)), sy + int(sh * 0.12), 0.0),
                 (min(WIDTH - 70, sx + int(sw * 0.94)), sy + int(sh * 0.16), 1.4),
@@ -577,7 +670,6 @@ def draw_mood_doodles(
                 draw.ellipse([ax - ir, ay - ir, ax + ir, ay + ir], fill=(*amber, alpha))
 
         elif kind == "steam_wisps":
-            # Rising organic steam curls in upper-left negative space (safe from head)
             base_x = max(90, sx + int(sw * 0.08))
             base_y = sy + int(sh * 0.34)
             for idx in range(2):
@@ -621,7 +713,9 @@ def synthesize_beat_wav(
     sample_rate: int = 44100,
 ) -> None:
     """Synthesize a soft Lo-Fi muted kick/wood-tick beat track for preview."""
-    total_samples = int(duration_sec * sample_rate)
+    if duration_sec <= 0 or bpm <= 0:
+        raise ValueError(f"Invalid duration ({duration_sec}) or BPM ({bpm})")
+    total_samples = max(1, int(duration_sec * sample_rate))
     beat_sec = 60.0 / bpm
     buf = [0.0] * total_samples
 
@@ -664,19 +758,20 @@ def _pick_frame_from_list(
     local_t: float,
     local_beat: float,
 ) -> Image.Image:
+    if not frames:
+        raise ValueError("Empty frame list in scene")
     if len(frames) == 1:
         return frames[0]
     mode = sc.get("frame_mode", "pingpong")
     if mode == "natural_blink":
-        # Stay on frame 0 most of the time; brief ~0.16s blink on frame 1 every ~2.5s
-        cycle_sec = float(sc.get("blink_interval", 2.5))
+        cycle_sec = max(0.25, float(sc.get("blink_interval", 2.5)))
         phase = (local_t + 0.6) % cycle_sec
         return frames[1] if phase < 0.16 else frames[0]
     if mode == "beat_toggle":
-        beats_per = float(sc.get("beats_per_frame", 1.0))
-        idx = int(local_beat / max(0.25, beats_per)) % len(frames)
+        beats_per = max(0.25, float(sc.get("beats_per_frame", 1.0)))
+        idx = int(local_beat / beats_per) % len(frames)
         return frames[idx]
-    fps_anim = float(sc.get("frame_fps", 4.0))
+    fps_anim = max(0.1, float(sc.get("frame_fps", 4.0)))
     step = int(local_t * fps_anim)
     if mode == "pingpong" and len(frames) > 2:
         cycle = len(frames) * 2 - 2
@@ -686,22 +781,25 @@ def _pick_frame_from_list(
     return frames[step % len(frames)]
 
 
-def _build_text_scrim(text_pos: str) -> Image.Image:
-    """Create a subtle gradient scrim behind subtitles for full-frame illustrations."""
+def _build_text_scrim(text_pos: str, theme: ThemePalette) -> Image.Image:
+    """Create a theme-aware subtle gradient scrim behind subtitles for full-frame illustrations."""
     scrim = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
     draw = ImageDraw.Draw(scrim)
+    base_col = (244, 238, 226) if theme.name == "paper_cream" else (10, 14, 18)
+    max_a_bot = 205 if theme.name == "paper_cream" else 175
+    max_a_top = 190 if theme.name == "paper_cream" else 155
     if text_pos == "bottom":
         y0, y1 = 1240, HEIGHT
         for y in range(y0, y1):
             frac = (y - y0) / (y1 - y0)
-            alpha = int(175 * (frac ** 1.3))
-            draw.line([(0, y), (WIDTH, y)], fill=(10, 14, 18, alpha))
+            alpha = int(max_a_bot * (frac ** 1.3))
+            draw.line([(0, y), (WIDTH, y)], fill=(*base_col, alpha))
     else:
         y0, y1 = 0, 740
         for y in range(y0, y1):
             frac = 1.0 - (y - y0) / (y1 - y0)
-            alpha = int(155 * (frac ** 1.35))
-            draw.line([(0, y), (WIDTH, y)], fill=(10, 14, 18, alpha))
+            alpha = int(max_a_top * (frac ** 1.35))
+            draw.line([(0, y), (WIDTH, y)], fill=(*base_col, alpha))
     return scrim
 
 
@@ -739,8 +837,8 @@ def _build_steam_puff() -> Image.Image:
 def _build_sunbeam_sprite() -> Image.Image:
     beam = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
     draw = ImageDraw.Draw(beam)
-    draw.polygon([(WIDTH - 40, 0), (WIDTH, 420), (340, HEIGHT), (60, HEIGHT)], fill=(255, 214, 146, 36))
-    draw.polygon([(WIDTH - 140, 0), (WIDTH - 20, 200), (140, HEIGHT - 180), (-60, HEIGHT - 360)], fill=(255, 224, 168, 28))
+    draw.polygon([(WIDTH - 40, 0), (WIDTH, 420), (340, HEIGHT), (60, HEIGHT)], fill=(255, 214, 146, 26))
+    draw.polygon([(WIDTH - 140, 0), (WIDTH - 20, 200), (140, HEIGHT - 180), (-60, HEIGHT - 360)], fill=(255, 224, 168, 20))
     return beam.filter(ImageFilter.GaussianBlur(radius=46))
 
 
@@ -778,12 +876,14 @@ class RenderAssets:
 
 def _apply_sensory_fx(
     stage: Image.Image,
+    overlay_draw: ImageDraw.ImageDraw,
     sc: dict[str, Any],
     assets: RenderAssets,
     t: float,
     beat_pulse: float,
     theme: ThemePalette,
 ) -> Image.Image:
+    """Apply sprite-based fx onto stage and vector-based fx onto the shared overlay_draw."""
     raw_fx = sc.get("fx", [])
     fx_list = [raw_fx] if isinstance(raw_fx, str) else list(raw_fx)
     if not fx_list:
@@ -791,9 +891,9 @@ def _apply_sensory_fx(
 
     for fx in fx_list:
         if fx == "coffee_steam":
-            pos = sc.get("steam_pos", [0.52, 0.62])
-            sx0 = int(WIDTH * float(pos[0]))
-            sy0 = int(HEIGHT * float(pos[1]))
+            pos = _parse_pos_pair(sc.get("steam_pos"), (0.52, 0.62), "steam_pos")
+            sx0 = int(WIDTH * pos[0])
+            sy0 = int(HEIGHT * pos[1])
             for idx in range(6):
                 life = ((t * 0.42 + idx / 6.0) % 1.0)
                 px = sx0 + int(24 * math.sin(life * 5.2 + idx * 1.1) + 12 * life)
@@ -808,12 +908,8 @@ def _apply_sensory_fx(
                 stage.alpha_composite(puff, (px - pw // 2, py - ph // 2))
 
         elif fx == "sunbeams":
-            sway = 0.55 + 0.45 * math.sin(t * 0.85)
-            beam = assets.sunbeam.copy()
-            alpha_band = beam.getchannel("A").point(lambda a, s=sway: int(a * s))
-            beam.putalpha(alpha_band)
             offset_x = int(28 * math.sin(t * 0.55))
-            stage.alpha_composite(beam, (offset_x, 0))
+            stage.alpha_composite(assets.sunbeam, (offset_x, 0))
 
         elif fx == "bokeh_depth":
             for bx0, by0, speed, phase, is_amber in assets.bokeh_seeds:
@@ -823,21 +919,15 @@ def _apply_sensory_fx(
                 stage.alpha_composite(orb, (bx - orb.width // 2, by - orb.height // 2))
 
         elif fx == "rain_glass":
-            rain_layer = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
-            rdraw = ImageDraw.Draw(rain_layer)
             for rx0, ry0, rspeed, rlen in assets.rain_drops:
                 ry = (ry0 + t * rspeed) % (HEIGHT - 120)
-                rdraw.line([(rx0, ry), (rx0 - 5, ry + rlen)], fill=(176, 212, 220, 52), width=2)
-                rdraw.ellipse([rx0 - 8, ry + rlen - 3, rx0 - 2, ry + rlen + 3], fill=(215, 236, 240, 72))
-            stage = Image.alpha_composite(stage, rain_layer)
+                overlay_draw.line([(rx0, ry), (rx0 - 5, ry + rlen)], fill=(176, 212, 220, 52), width=2)
+                overlay_draw.ellipse([rx0 - 8, ry + rlen - 3, rx0 - 2, ry + rlen + 3], fill=(215, 236, 240, 72))
 
         elif fx == "cat_zzz":
-            # Gentle hand-inked "z Z" floating sleep glyphs above cat_pos
-            pos = sc.get("cat_pos", [0.74, 0.72])
-            cx0 = int(WIDTH * float(pos[0]))
-            cy0 = int(HEIGHT * float(pos[1]))
-            z_layer = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
-            zdraw = ImageDraw.Draw(z_layer)
+            pos = _parse_pos_pair(sc.get("cat_pos"), (0.74, 0.72), "cat_pos")
+            cx0 = int(WIDTH * pos[0])
+            cy0 = int(HEIGHT * pos[1])
             ink_col = theme.text_primary if theme.name == "paper_cream" else (232, 236, 238)
             for idx in range(3):
                 life = (t * 0.45 + idx / 3.0) % 1.0
@@ -847,16 +937,12 @@ def _apply_sensory_fx(
                 alpha = int(205 * math.sin(math.pi * life))
                 if alpha > 8:
                     pts = [(zx, zy), (zx + sz, zy), (zx, zy + sz), (zx + sz, zy + sz)]
-                    zdraw.line(pts, fill=(*ink_col, alpha), width=3, joint="curve")
-            stage = Image.alpha_composite(stage, z_layer)
+                    overlay_draw.line(pts, fill=(*ink_col, alpha), width=3, joint="curve")
 
         elif fx == "purr_waves":
-            # Soft curved manga purr / comfort vibration lines beside cat_pos
-            pos = sc.get("cat_pos", [0.70, 0.62])
-            cx0 = int(WIDTH * float(pos[0]))
-            cy0 = int(HEIGHT * float(pos[1]))
-            p_layer = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
-            pdraw = ImageDraw.Draw(p_layer)
+            pos = _parse_pos_pair(sc.get("cat_pos"), (0.70, 0.62), "cat_pos")
+            cx0 = int(WIDTH * pos[0])
+            cy0 = int(HEIGHT * pos[1])
             pulse = 0.4 + 0.6 * (0.5 + 0.5 * math.sin(t * 3.8))
             alpha = int(130 * pulse)
             for idx in range(2):
@@ -868,14 +954,12 @@ def _apply_sensory_fx(
                     (ox + 22, oy + 2),
                     (ox + 34, oy - 5),
                 ]
-                pdraw.line(pts, fill=(*theme.accent_primary, alpha), width=3, joint="curve")
-            stage = Image.alpha_composite(stage, p_layer)
+                overlay_draw.line(pts, fill=(*theme.accent_primary, alpha), width=3, joint="curve")
 
         elif fx == "prop_pulse":
-            # Subtle breathing ambient glow over a specific prop (e.g. phone screen, clock, streetlight)
-            pos = sc.get("prop_pos", [0.70, 0.56])
-            px0 = int(WIDTH * float(pos[0]))
-            py0 = int(HEIGHT * float(pos[1]))
+            pos = _parse_pos_pair(sc.get("prop_pos"), (0.70, 0.56), "prop_pos")
+            px0 = int(WIDTH * pos[0])
+            py0 = int(HEIGHT * pos[1])
             p_color = sc.get("prop_color", "teal")
             base_orb = assets.bokeh_amber if p_color == "amber" else assets.bokeh_teal
             pulse = 0.55 + 0.45 * math.sin(t * 2.2) + 0.25 * beat_pulse
@@ -883,8 +967,6 @@ def _apply_sensory_fx(
             pw = max(32, int(base_orb.width * scale))
             ph = max(32, int(base_orb.height * scale))
             orb = base_orb.resize((pw, ph), Image.Resampling.BILINEAR)
-            alpha_band = orb.getchannel("A").point(lambda a, p=pulse: min(255, int(a * (0.8 + 0.7 * p))))
-            orb.putalpha(alpha_band)
             stage.alpha_composite(orb, (px0 - pw // 2, py0 - ph // 2))
 
         elif fx == "film_grain":
@@ -974,6 +1056,9 @@ def _render_scene_layer(
 
     scene_frames: list[Image.Image] = sc.get("scene_frames", [])
     is_full_frame = len(scene_frames) > 0
+    overlay = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+    odraw = ImageDraw.Draw(overlay)
+
     if is_full_frame:
         src = _pick_frame_from_list(scene_frames, sc, local_t, local_beat)
         oversample_w, oversample_h = src.size
@@ -1019,27 +1104,26 @@ def _render_scene_layer(
         y0 = max(0.0, min(oversample_h - crop_h, cy - crop_h / 2.0))
         stage = src.crop((x0, y0, x0 + crop_w, y0 + crop_h)).resize((WIDTH, HEIGHT), Image.Resampling.BILINEAR)
 
-        # Optional 2.5D foreground parallax character/object layer moving faster than background
         fg_frames: list[Image.Image] = sc.get("fg_frames", [])
         if fg_frames:
             fg_raw = _pick_frame_from_list(fg_frames, sc, local_t, local_beat)
             fg_motion = sc.get("motion", "alive_idle")
-            fg_scale_mult = float(sc.get("fg_scale", 1.0)) * (1.0 + (zoom - 1.0) * float(sc.get("fg_parallax", 1.45)))
+            fg_base_scale = max(0.1, float(sc.get("fg_scale", 1.0)))
+            fg_parallax_px = float(sc.get("fg_parallax", 1.45))
+            fg_scale_mult = fg_base_scale * (1.0 + (zoom - 1.0) * fg_parallax_px)
             cur_fg = _transform_sticker(fg_raw, fg_motion, local_t, local_beat, beat_sec, beat_pulse)
             if abs(fg_scale_mult - 1.0) > 0.002:
                 fw = max(1, int(round(cur_fg.width * fg_scale_mult)))
                 fh = max(1, int(round(cur_fg.height * fg_scale_mult)))
                 cur_fg = cur_fg.resize((fw, fh), Image.Resampling.BILINEAR)
-            fg_parallax_px = float(sc.get("fg_parallax", 1.45))
             fg_dx = int(-pan_x * 36 * fg_parallax_px + breath_dx * 1.35 + float(sc.get("fg_offset_x", 0)))
             fg_dy = int(_sticker_dy(fg_motion, local_t, local_beat, beat_sec, beat_pulse) - pan_y * 28 * fg_parallax_px + breath_dy * 1.35)
             fx = WIDTH // 2 - cur_fg.width // 2 + fg_dx
             fy = int(sc.get("fg_bottom_y", 1710)) - cur_fg.height + fg_dy
             stage.alpha_composite(cur_fg, (fx, fy))
 
-        # Dynamic breathing light bloom over lamp / sunlight anchor (with optional filament flicker)
-        light_pos = sc.get("light_pos")
-        if light_pos and len(light_pos) == 2:
+        if sc.get("light_pos") is not None:
+            lpos = _parse_pos_pair(sc.get("light_pos"), (0.5, 0.5), "light_pos")
             flicker = 0.0
             if "lamp_flicker" in (sc.get("fx") or []):
                 flicker = 0.08 * math.sin(t * 11.3) * math.cos(t * 4.7)
@@ -1047,36 +1131,29 @@ def _render_scene_layer(
             gw = max(64, int(assets.warm_glow.width * glow_scale))
             gh = max(64, int(assets.warm_glow.height * glow_scale))
             glow_resized = assets.warm_glow.resize((gw, gh), Image.Resampling.BILINEAR)
-            lx = int(WIDTH * float(light_pos[0])) - gw // 2
-            ly = int(HEIGHT * float(light_pos[1])) - gh // 2
+            lx = int(WIDTH * lpos[0]) - gw // 2
+            ly = int(HEIGHT * lpos[1]) - gh // 2
             stage.alpha_composite(glow_resized, (lx, ly))
 
-        # Ambient drifting dust motes
-        mote_layer = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
-        mdraw = ImageDraw.Draw(mote_layer)
         for mx0, my0, mr, mspeed, mphase in assets.motes:
             mx = mx0 + 22.0 * math.sin(t * mspeed + mphase)
             my = (my0 - t * 22.0 * mspeed) % (HEIGHT - 120)
             malpha = int(38 + 32 * math.sin(t * 1.4 + mphase) + 22 * beat_pulse)
-            mdraw.ellipse([mx - mr, my - mr, mx + mr, my + mr], fill=(*theme.mote_color, max(8, min(125, malpha))))
-        stage = Image.alpha_composite(stage, mote_layer)
+            odraw.ellipse([mx - mr, my - mr, mx + mr, my + mr], fill=(*theme.mote_color, max(8, min(125, malpha))))
 
-        # Sensory fx (coffee_steam, sunbeams, bokeh_depth, rain_glass, film_grain)
-        stage = _apply_sensory_fx(stage, sc, assets, t, beat_pulse, theme)
+        stage = _apply_sensory_fx(stage, odraw, sc, assets, t, beat_pulse, theme)
 
         raw_doodles = sc.get("doodle", [])
         doodles = [raw_doodles] if isinstance(raw_doodles, str) else list(raw_doodles)
         if doodles:
-            doodle_layer = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
-            draw_mood_doodles(doodle_layer, doodles, t, local_beat, beat_pulse, (140, 640, 800, 1000), theme)
-            stage = Image.alpha_composite(stage, doodle_layer)
+            draw_mood_doodles(odraw, doodles, t, local_beat, beat_pulse, (140, 640, 800, 1000), theme)
 
+        stage = Image.alpha_composite(stage, overlay)
         stage = Image.alpha_composite(stage, assets.vignette)
         text_pos = sc.get("text_pos", "top")
         if text_pos in assets.scrims:
             stage = Image.alpha_composite(stage, assets.scrims[text_pos])
     else:
-        # Mode B cutout sticker composition mode
         cam_scale = 1.0
         cam_dy = 0.0
         if cam == "push_in":
@@ -1100,17 +1177,14 @@ def _render_scene_layer(
         glow_resized = assets.warm_glow.resize((gw, gh), Image.Resampling.BILINEAR)
         stage.alpha_composite(glow_resized, (WIDTH // 2 - gw // 2, 1280 - gh // 2))
 
-        mote_layer = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
-        mdraw = ImageDraw.Draw(mote_layer)
         for mx0, my0, mr, mspeed, mphase in assets.motes:
             mx = mx0 + 18.0 * math.sin(t * mspeed + mphase)
             my = (my0 - t * 18.0 * mspeed) % 1620
             malpha = int(42 + 34 * math.sin(t * 1.4 + mphase) + 28 * beat_pulse)
-            mdraw.ellipse(
+            odraw.ellipse(
                 [mx - mr, my - mr, mx + mr, my + mr],
                 fill=(*theme.mote_color, max(10, min(140, malpha))),
             )
-        stage = Image.alpha_composite(stage, mote_layer)
 
         sticker = _pick_frame_from_list(sc["sticker_frames"], sc, local_t, local_beat)
         motion = sc.get("motion", "alive_idle")
@@ -1121,14 +1195,13 @@ def _render_scene_layer(
         paste_y = int(HORIZON_Y - cur_sticker.height + dy)
         stage.alpha_composite(cur_sticker, (paste_x, paste_y))
 
-        stage = _apply_sensory_fx(stage, sc, assets, t, beat_pulse, theme)
+        stage = _apply_sensory_fx(stage, odraw, sc, assets, t, beat_pulse, theme)
 
         raw_doodles = sc.get("doodle", [])
         doodles = [raw_doodles] if isinstance(raw_doodles, str) else list(raw_doodles)
         if doodles:
-            doodle_layer = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
             draw_mood_doodles(
-                doodle_layer,
+                odraw,
                 doodles,
                 t,
                 local_beat,
@@ -1136,7 +1209,8 @@ def _render_scene_layer(
                 (paste_x, paste_y, cur_sticker.width, cur_sticker.height),
                 theme,
             )
-            stage = Image.alpha_composite(stage, doodle_layer)
+
+        stage = Image.alpha_composite(stage, overlay)
 
         if abs(cam_scale - 1.0) > 0.0005 or abs(cam_dy) > 0.5:
             zw = int(round(WIDTH * cam_scale))
@@ -1149,7 +1223,8 @@ def _render_scene_layer(
     # Typography & HUD overlay
     text_layer = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
     tdraw = ImageDraw.Draw(text_layer)
-    text_theme = THEMES["late_night"] if is_full_frame else theme
+    text_theme_name = sc.get("text_theme", theme.name)
+    text_theme = THEMES.get(text_theme_name, theme)
 
     if header_tag:
         tbox = tdraw.textbbox((0, 0), header_tag, font=font_tag)
@@ -1167,13 +1242,12 @@ def _render_scene_layer(
         width=3,
     )
 
-    # Optional scene timestamp badge (e.g. "02:15 AM") for emotional passage of time
     ts_label = sc.get("timestamp")
     if ts_label:
         ts_font = load_font(font_path, 22)
-        ts_box = tdraw.textbbox((0, 0), ts_label, font=ts_font)
+        ts_box = tdraw.textbbox((0, 0), str(ts_label), font=ts_font)
         ts_w = ts_box[2] - ts_box[0]
-        tdraw.text((WIDTH // 2 - ts_w // 2, 212), ts_label, font=ts_font, fill=(*text_theme.accent_primary, 175))
+        tdraw.text((WIDTH // 2 - ts_w // 2, 212), str(ts_label), font=ts_font, fill=(*text_theme.accent_primary, 175))
 
     lines: list[str] = sc.get("lines", [])
     highlights: list[str] = sc.get("highlight", [])
@@ -1261,7 +1335,6 @@ def _render_scene_layer(
                 line_seed=idx_l + 1,
             )
 
-    # Bottom 4-beat measure dot indicator
     cur_measure_beat = int(t / beat_sec) % 4
     dot_gap = 28
     dots_start_x = WIDTH // 2 - (3 * dot_gap) // 2
@@ -1287,7 +1360,6 @@ def _apply_transition(
     if transition == "crossfade":
         return Image.blend(prev_frame, cur_frame, p)
     if transition == "luma_fade":
-        # Dip smoothly through midnight shadow in the midpoint for emotional beats
         if progress < 0.5:
             dip = ease_in_out_sine(progress * 2.0)
             shadow = Image.new("RGBA", (WIDTH, HEIGHT), (10, 14, 18, 255))
@@ -1313,6 +1385,160 @@ def _apply_transition(
     return cur_frame
 
 
+def compile_timeline(
+    data: Any,
+    base_dir: Path,
+    skill_dir: Path,
+    theme_override: str | None = None,
+    bg_override: Path | None = None,
+    load_images: bool = False,
+) -> tuple[float, ThemePalette, Path | None, list[dict[str, Any]]]:
+    """Validate timeline schema and resolve all scene assets (shared by --validate and render_video)."""
+    if not isinstance(data, dict):
+        raise ValueError("Timeline JSON root must be an object")
+
+    try:
+        bpm = float(data.get("bpm", 84))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid BPM value: {data.get('bpm')!r}") from exc
+    if not (math.isfinite(bpm) and 10.0 <= bpm <= 300.0):
+        raise ValueError(f"BPM must be between 10 and 300, got: {bpm}")
+
+    theme_name = theme_override or data.get("theme", "late_night")
+    if theme_name not in THEMES:
+        raise ValueError(f"Unknown theme '{theme_name}'. Choose from: {', '.join(THEMES)}")
+    theme = THEMES[theme_name]
+
+    bg_path = bg_override
+    if bg_path is not None:
+        if not bg_path.is_file():
+            raise FileNotFoundError(f"Custom background not found: {bg_path}")
+    elif data.get("background"):
+        bg_path = resolve_asset_path(str(data["background"]), base_dir, skill_dir)
+
+    scenes = data.get("scenes")
+    if not isinstance(scenes, list) or not scenes:
+        raise ValueError("Timeline 'scenes' must be a non-empty list")
+
+    beat_sec = 60.0 / bpm
+    cur_beat = 0.0
+    compiled_scenes: list[dict[str, Any]] = []
+    sticker_cache: dict[str, Image.Image] = {}
+    scene_cache: dict[str, Image.Image] = {}
+    oversample_w, oversample_h = int(WIDTH * 1.14), int(HEIGHT * 1.14)
+    default_max_chars = max(4, int(data.get("max_chars_per_line", 14)))
+
+    for idx_s, sc in enumerate(scenes, 1):
+        if not isinstance(sc, dict):
+            raise ValueError(f"Scene {idx_s} must be a JSON object")
+        try:
+            beats = float(sc.get("beats", 4))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Scene {idx_s} has invalid 'beats': {sc.get('beats')!r}") from exc
+        if not (math.isfinite(beats) and 0.25 <= beats <= 120.0):
+            raise ValueError(f"Scene {idx_s} 'beats' must be in [0.25, 120], got: {beats}")
+
+        # Validate optional coordinate pairs upfront
+        for pos_field, pos_def in (
+            ("light_pos", (0.5, 0.5)),
+            ("steam_pos", (0.52, 0.62)),
+            ("cat_pos", (0.74, 0.72)),
+            ("prop_pos", (0.70, 0.56)),
+        ):
+            if sc.get(pos_field) is not None:
+                _parse_pos_pair(sc.get(pos_field), pos_def, f"scenes[{idx_s}].{pos_field}")
+
+        # Validate positive timing floats
+        for num_field, min_val in (
+            ("blink_interval", 0.1),
+            ("beats_per_frame", 0.1),
+            ("frame_fps", 0.1),
+            ("fg_scale", 0.05),
+        ):
+            if sc.get(num_field) is not None:
+                val = float(sc[num_field])
+                if not (math.isfinite(val) and val >= min_val):
+                    raise ValueError(f"Scene {idx_s} '{num_field}' must be >= {min_val}, got: {val}")
+
+        start_t = cur_beat * beat_sec
+        end_t = (cur_beat + beats) * beat_sec
+        cur_beat += beats
+
+        raw_scene_list = sc.get("scene_frames") if sc.get("scene_frames") is not None else (
+            [sc["scene_image"]] if sc.get("scene_image") else []
+        )
+        raw_fg_list = sc.get("fg_frames") if sc.get("fg_frames") is not None else (
+            [sc["fg_image"]] if sc.get("fg_image") else []
+        )
+        raw_sticker_list = sc.get("frames") if sc.get("frames") is not None else (
+            [sc["sticker"]] if sc.get("sticker") else []
+        )
+
+        if not isinstance(raw_scene_list, list) or not isinstance(raw_fg_list, list) or not isinstance(raw_sticker_list, list):
+            raise ValueError(f"Scene {idx_s} frame lists must be arrays")
+        if not raw_scene_list and not raw_sticker_list:
+            raise ValueError(
+                f"Scene {idx_s} must specify at least one visual asset ('scene_image', 'scene_frames', 'sticker', or 'frames')"
+            )
+
+        scene_frames: list[Image.Image] = []
+        fg_frames: list[Image.Image] = []
+        sticker_frames: list[Image.Image] = []
+
+        for raw_sc in raw_scene_list:
+            resolved_scene = resolve_asset_path(str(raw_sc), base_dir, skill_dir)
+            if load_images:
+                s_key = str(resolved_scene.resolve())
+                if s_key not in scene_cache:
+                    raw_img = _safe_open_rgba(resolved_scene)
+                    scene_cache[s_key] = _cover_resize(raw_img, oversample_w, oversample_h)
+                scene_frames.append(scene_cache[s_key])
+
+        for raw_fg in raw_fg_list:
+            resolved_fg = resolve_asset_path(str(raw_fg), base_dir, skill_dir)
+            if load_images:
+                f_key = str(resolved_fg.resolve())
+                if f_key not in sticker_cache:
+                    sticker_cache[f_key] = load_and_trim_sticker(resolved_fg)
+                fg_frames.append(sticker_cache[f_key])
+
+        if not raw_scene_list:
+            for raw_s in raw_sticker_list:
+                resolved = resolve_asset_path(str(raw_s), base_dir, skill_dir)
+                if load_images:
+                    key = str(resolved.resolve())
+                    if key not in sticker_cache:
+                        sticker_cache[key] = load_and_trim_sticker(resolved)
+                    sticker_frames.append(sticker_cache[key])
+
+        raw_lines = sc.get("lines", [])
+        if not isinstance(raw_lines, list):
+            raise ValueError(f"Scene {idx_s} 'lines' must be a list of strings")
+        raw_highlights = sc.get("highlight", []) or []
+        if not isinstance(raw_highlights, list):
+            raise ValueError(f"Scene {idx_s} 'highlight' must be a list of strings")
+        highlights = [str(h) for h in raw_highlights if h]
+
+        max_line_chars = max(4, int(sc.get("max_chars_per_line", default_max_chars)))
+        wrapped_lines = _wrap_cjk_lines([str(x) for x in raw_lines], max_chars=max_line_chars, highlights=highlights)
+
+        vis_src = str((raw_scene_list or raw_sticker_list)[0])
+        compiled_scenes.append({
+            **sc,
+            "_vis_src": vis_src,
+            "lines": wrapped_lines,
+            "highlight": highlights,
+            "start_t": start_t,
+            "end_t": end_t,
+            "beats": beats,
+            "scene_frames": scene_frames,
+            "fg_frames": fg_frames,
+            "sticker_frames": sticker_frames,
+        })
+
+    return bpm, theme, bg_path, compiled_scenes
+
+
 def render_video(
     timeline_path: Path,
     out_prefix: Path,
@@ -1322,94 +1548,34 @@ def render_video(
     theme_override: str | None = None,
     bg_override: Path | None = None,
 ) -> tuple[Path, Path]:
+    if not (1 <= int(fps) <= 120):
+        raise ValueError(f"FPS must be between 1 and 120, got: {fps}")
+    if audio_path is not None and not audio_path.is_file():
+        raise FileNotFoundError(f"Custom audio file not found: {audio_path}")
+
     ok, resolved_font = check_environment(font_path)
     if not ok:
         raise SystemExit(1)
 
-    data: dict[str, Any] = json.loads(timeline_path.read_text(encoding="utf-8"))
-    bpm = float(data.get("bpm", 84))
-    beat_sec = 60.0 / bpm
-    header_tag = data.get("tag", "")
-    theme_name = theme_override or data.get("theme", "late_night")
-    if theme_name not in THEMES:
-        raise ValueError(f"Unknown theme '{theme_name}'. Choose from: {', '.join(THEMES)}")
-    theme = THEMES[theme_name]
-    base_font_size = int(data.get("font_size", 58))
-
+    data: Any = json.loads(timeline_path.read_text(encoding="utf-8"))
     base_dir = timeline_path.parent
     skill_dir = Path(__file__).resolve().parent.parent
 
-    bg_path = bg_override
-    if bg_path is None and data.get("background"):
-        bg_path = resolve_asset_path(str(data["background"]), base_dir, skill_dir)
+    bpm, theme, bg_path, compiled_scenes = compile_timeline(
+        data,
+        base_dir=base_dir,
+        skill_dir=skill_dir,
+        theme_override=theme_override,
+        bg_override=bg_override,
+        load_images=True,
+    )
+    beat_sec = 60.0 / bpm
+    header_tag = str(data.get("tag", ""))
+    base_font_size = max(34, min(120, int(data.get("font_size", 58))))
 
-    scenes = data["scenes"]
-    compiled_scenes: list[dict[str, Any]] = []
-    cur_beat = 0.0
-    sticker_cache: dict[str, Image.Image] = {}
-    scene_cache: dict[str, Image.Image] = {}
-    oversample_w, oversample_h = int(WIDTH * 1.14), int(HEIGHT * 1.14)
-
-    for sc in scenes:
-        beats = float(sc.get("beats", 4))
-        start_t = cur_beat * beat_sec
-        end_t = (cur_beat + beats) * beat_sec
-        cur_beat += beats
-
-        scene_frames: list[Image.Image] = []
-        fg_frames: list[Image.Image] = []
-        sticker_frames: list[Image.Image] = []
-
-        raw_scene_list = sc.get("scene_frames") or ([sc["scene_image"]] if sc.get("scene_image") else [])
-        for raw_sc in raw_scene_list:
-            resolved_scene = resolve_asset_path(str(raw_sc), base_dir, skill_dir)
-            s_key = str(resolved_scene.resolve())
-            if s_key not in scene_cache:
-                raw_scene = Image.open(resolved_scene).convert("RGBA")
-                scene_cache[s_key] = _cover_resize(raw_scene, oversample_w, oversample_h)
-            scene_frames.append(scene_cache[s_key])
-
-        raw_fg_list = sc.get("fg_frames") or ([sc["fg_image"]] if sc.get("fg_image") else [])
-        for raw_fg in raw_fg_list:
-            resolved_fg = resolve_asset_path(str(raw_fg), base_dir, skill_dir)
-            f_key = str(resolved_fg.resolve())
-            if f_key not in sticker_cache:
-                sticker_cache[f_key] = load_and_trim_sticker(resolved_fg)
-            fg_frames.append(sticker_cache[f_key])
-
-        if not scene_frames:
-            raw_list = sc.get("frames") or [sc["sticker"]]
-            for raw_s in raw_list:
-                resolved = resolve_asset_path(str(raw_s), base_dir, skill_dir)
-                key = str(resolved.resolve())
-                if key not in sticker_cache:
-                    sticker_cache[key] = load_and_trim_sticker(resolved)
-                sticker_frames.append(sticker_cache[key])
-
-        max_line_chars = int(sc.get("max_chars_per_line", data.get("max_chars_per_line", 14)))
-        wrapped_lines = _wrap_cjk_lines(list(sc.get("lines", [])), max_chars=max_line_chars)
-
-        vis_src = str(
-            sc.get("scene_image")
-            or (sc.get("scene_frames") or [None])[0]
-            or sc.get("sticker")
-            or (sc.get("frames") or [""])[0]
-        )
-        compiled_scenes.append({
-            **sc,
-            "_vis_src": vis_src,
-            "lines": wrapped_lines,
-            "start_t": start_t,
-            "end_t": end_t,
-            "beats": beats,
-            "scene_frames": scene_frames,
-            "fg_frames": fg_frames,
-            "sticker_frames": sticker_frames,
-        })
-
-    total_duration = cur_beat * beat_sec
+    total_duration = compiled_scenes[-1]["end_t"]
     total_frames = max(1, int(round(total_duration * fps)))
-    avg_shot_sec = total_duration / max(1, len(compiled_scenes))
+    avg_shot_sec = total_duration / len(compiled_scenes)
     total_chars = sum(len(ln.replace(" ", "").replace(".", "")) for cs in compiled_scenes for ln in cs.get("lines", []))
     print(
         f"Timeline: {len(compiled_scenes)} shots | {total_chars} chars | "
@@ -1428,8 +1594,8 @@ def render_video(
         warm_glow=build_warm_glow(theme, 440),
         vignette=_build_vignette(82),
         scrims={
-            "top": _build_text_scrim("top"),
-            "bottom": _build_text_scrim("bottom"),
+            "top": _build_text_scrim("top", theme),
+            "bottom": _build_text_scrim("bottom", theme),
         },
         bokeh_amber=_build_bokeh_orb(42, theme.accent_primary, alpha=38),
         bokeh_teal=_build_bokeh_orb(52, theme.accent_secondary, alpha=32),
@@ -1471,103 +1637,122 @@ def render_video(
     out_prefix.parent.mkdir(parents=True, exist_ok=True)
     silent_mp4 = out_prefix.parent / f"{out_prefix.name}_silent.mp4"
     preview_mp4 = out_prefix.parent / f"{out_prefix.name}_beat_preview.mp4"
+    trans_duration = max(0.0, float(data.get("transition_sec", min(0.58, beat_sec * 0.72))))
 
-    ffmpeg_cmd = [
-        "ffmpeg",
-        "-y",
-        "-f", "rawvideo",
-        "-vcodec", "rawvideo",
-        "-pix_fmt", "rgb24",
-        "-s", f"{WIDTH}x{HEIGHT}",
-        "-r", str(fps),
-        "-i", "-",
-        "-c:v", "libx264",
-        "-preset", "medium",
-        "-crf", "18",
-        "-pix_fmt", "yuv420p",
-        "-movflags", "+faststart",
-        str(silent_mp4),
-    ]
+    with tempfile.TemporaryDirectory(dir=str(out_prefix.parent)) as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        tmp_silent = tmp_path / "silent.mp4"
+        tmp_preview = tmp_path / "preview.mp4"
 
-    proc = subprocess.Popen(
-        ffmpeg_cmd,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-    )
-    assert proc.stdin is not None
+        ffmpeg_cmd = [
+            "ffmpeg",
+            "-y",
+            "-f", "rawvideo",
+            "-vcodec", "rawvideo",
+            "-pix_fmt", "rgb24",
+            "-s", f"{WIDTH}x{HEIGHT}",
+            "-r", str(fps),
+            "-i", "-",
+            "-c:v", "libx264",
+            "-preset", "medium",
+            "-crf", "18",
+            "-pix_fmt", "yuv420p",
+            "-colorspace", "bt709",
+            "-color_primaries", "bt709",
+            "-color_trc", "bt709",
+            "-movflags", "+faststart",
+            str(tmp_silent),
+        ]
 
-    scene_idx = 0
-    trans_duration = float(data.get("transition_sec", min(0.58, beat_sec * 0.72)))
+        with tempfile.TemporaryFile() as stderr_file:
+            proc = subprocess.Popen(
+                ffmpeg_cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=stderr_file,
+            )
+            assert proc.stdin is not None
+            scene_idx = 0
+            try:
+                for f_idx in range(total_frames):
+                    t = f_idx / fps
+                    while scene_idx + 1 < len(compiled_scenes) and t >= compiled_scenes[scene_idx]["end_t"]:
+                        scene_idx += 1
 
-    for f_idx in range(total_frames):
-        t = f_idx / fps
-        while scene_idx + 1 < len(compiled_scenes) and t >= compiled_scenes[scene_idx]["end_t"]:
-            scene_idx += 1
+                    sc = compiled_scenes[scene_idx]
+                    frame = _render_scene_layer(
+                        sc,
+                        t,
+                        beat_sec,
+                        total_duration,
+                        assets,
+                        theme,
+                        resolved_font,
+                        base_font_size,
+                        font_tag,
+                        header_tag,
+                    )
 
-        sc = compiled_scenes[scene_idx]
-        frame = _render_scene_layer(
-            sc,
-            t,
-            beat_sec,
-            total_duration,
-            assets,
-            theme,
-            resolved_font,
-            base_font_size,
-            font_tag,
-            header_tag,
-        )
+                    if scene_idx > 0 and trans_duration > 0.005:
+                        transition = sc.get("transition", "crossfade")
+                        local_t = t - sc["start_t"]
+                        if transition != "cut" and local_t < trans_duration:
+                            prev_sc = compiled_scenes[scene_idx - 1]
+                            prev_frame = _render_scene_layer(
+                                prev_sc,
+                                t,
+                                beat_sec,
+                                total_duration,
+                                assets,
+                                theme,
+                                resolved_font,
+                                base_font_size,
+                                font_tag,
+                                header_tag,
+                            )
+                            frame = _apply_transition(prev_frame, frame, transition, local_t / trans_duration, theme)
 
-        # Scene entry transition from previous scene
-        if scene_idx > 0:
-            transition = sc.get("transition", "crossfade")
-            local_t = t - sc["start_t"]
-            if transition != "cut" and local_t < trans_duration:
-                prev_sc = compiled_scenes[scene_idx - 1]
-                prev_frame = _render_scene_layer(
-                    prev_sc,
-                    t,
-                    beat_sec,
-                    total_duration,
-                    assets,
-                    theme,
-                    resolved_font,
-                    base_font_size,
-                    font_tag,
-                    header_tag,
-                )
-                frame = _apply_transition(prev_frame, frame, transition, local_t / trans_duration, theme)
+                    proc.stdin.write(frame.convert("RGB").tobytes())
+            except BrokenPipeError:
+                pass
+            except Exception:
+                proc.kill()
+                raise
+            finally:
+                try:
+                    proc.stdin.close()
+                except Exception:
+                    pass
+                proc.wait()
 
-        proc.stdin.write(frame.convert("RGB").tobytes())
+            if proc.returncode != 0:
+                stderr_file.seek(0)
+                err_msg = stderr_file.read().decode("utf-8", errors="ignore")
+                raise RuntimeError(f"FFmpeg video encode failed (exit {proc.returncode}): {err_msg}")
 
-    proc.stdin.close()
-    stderr = proc.stderr.read() if proc.stderr else b""
-    proc.wait()
-    if proc.returncode != 0:
-        raise RuntimeError(f"FFmpeg failed: {stderr.decode('utf-8', errors='ignore')}")
-
-    with tempfile.TemporaryDirectory() as tmp:
         audio_source = audio_path
         if audio_source is None:
-            synth_wav = Path(tmp) / "beat_preview.wav"
+            synth_wav = tmp_path / "beat_preview.wav"
             synthesize_beat_wav(synth_wav, total_duration, bpm)
             audio_source = synth_wav
 
         mux_cmd = [
             "ffmpeg",
             "-y",
-            "-i", str(silent_mp4),
+            "-i", str(tmp_silent),
             "-i", str(audio_source),
             "-c:v", "copy",
             "-c:a", "aac",
             "-b:a", "192k",
             "-shortest",
-            str(preview_mp4),
+            str(tmp_preview),
         ]
         res = subprocess.run(mux_cmd, capture_output=True, text=True)
         if res.returncode != 0:
             raise RuntimeError(f"Audio mux failed: {res.stderr}")
+
+        os.replace(tmp_silent, silent_mp4)
+        os.replace(tmp_preview, preview_mp4)
 
     return silent_mp4, preview_mp4
 
@@ -1582,7 +1767,7 @@ def main() -> None:
     parser.add_argument("--theme", choices=sorted(THEMES.keys()), default=None, help="Override timeline theme")
     parser.add_argument("--bg", type=Path, default=None, help="Optional custom background image")
     parser.add_argument("--check", action="store_true", help="Check ffmpeg and CJK font setup and exit")
-    parser.add_argument("--validate", action="store_true", help="Validate timeline wrapping & pacing without rendering")
+    parser.add_argument("--validate", action="store_true", help="Validate timeline schema, assets, wrapping & pacing")
     args = parser.parse_args()
 
     if args.check:
@@ -1595,21 +1780,17 @@ def main() -> None:
         if not args.timeline:
             parser.error("--timeline is required with --validate")
         data = json.loads(args.timeline.read_text(encoding="utf-8"))
-        bpm = float(data.get("bpm", 84))
-        beat_sec = 60.0 / bpm
-        cur_beat = 0.0
-        compiled: list[dict[str, Any]] = []
-        max_c = int(data.get("max_chars_per_line", 14))
-        for sc in data["scenes"]:
-            beats = float(sc.get("beats", 4))
-            compiled.append({
-                **sc,
-                "lines": _wrap_cjk_lines(list(sc.get("lines", [])), max_chars=int(sc.get("max_chars_per_line", max_c))),
-                "start_t": cur_beat * beat_sec,
-                "end_t": (cur_beat + beats) * beat_sec,
-            })
-            cur_beat += beats
-        total_dur = cur_beat * beat_sec
+        base_dir = args.timeline.parent
+        skill_dir = Path(__file__).resolve().parent.parent
+        bpm, _theme, _bg, compiled = compile_timeline(
+            data,
+            base_dir=base_dir,
+            skill_dir=skill_dir,
+            theme_override=args.theme,
+            bg_override=args.bg,
+            load_images=False,
+        )
+        total_dur = compiled[-1]["end_t"]
         print(f"Validated {len(compiled)} shots | {bpm:g} BPM | {total_dur:.2f}s")
         for idx_s, cs in enumerate(compiled, 1):
             print(f"  Shot {idx_s} ({cs['end_t'] - cs['start_t']:.2f}s): {cs['lines']}")
