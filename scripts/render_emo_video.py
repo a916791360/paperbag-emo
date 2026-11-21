@@ -116,7 +116,7 @@ def ease_out_back(x: float) -> float:
     return 1.0 + c3 * ((x - 1.0) ** 3) + c1 * ((x - 1.0) ** 2)
 
 
-def _platform_font_candidates() -> list[str]:
+def _platform_font_candidates(prefer_serif: bool = False) -> list[str]:
     candidates: list[str] = []
     skill_fonts = Path(__file__).resolve().parent.parent / "assets" / "fonts"
     if skill_fonts.is_dir():
@@ -124,6 +124,8 @@ def _platform_font_candidates() -> list[str]:
             candidates.extend(sorted(str(p) for p in skill_fonts.glob(ext)))
 
     if sys.platform == "darwin":
+        if prefer_serif:
+            candidates.append("/System/Library/Fonts/Supplemental/Songti.ttc")
         candidates.extend([
             "/System/Library/Fonts/PingFang.ttc",
             "/System/Library/Fonts/Hiragino Sans GB.ttc",
@@ -135,6 +137,8 @@ def _platform_font_candidates() -> list[str]:
         candidates.extend(sorted(glob.glob("/System/Library/AssetsV2/*/PingFang*.ttc")))
     elif sys.platform.startswith("win"):
         win_fonts = Path("C:/Windows/Fonts")
+        if prefer_serif:
+            candidates.append(str(win_fonts / "simsun.ttc"))
         candidates.extend([
             str(win_fonts / "msyhbd.ttc"),
             str(win_fonts / "msyh.ttc"),
@@ -144,6 +148,11 @@ def _platform_font_candidates() -> list[str]:
             str(win_fonts / "simsun.ttc"),
         ])
     else:
+        if prefer_serif:
+            candidates.extend([
+                "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc",
+                "/usr/share/fonts/noto-cjk/NotoSerifCJK-Regular.ttc",
+            ])
         candidates.extend([
             "/usr/share/fonts/opentype/noto/NotoSansCJK-Medium.ttc",
             "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
@@ -169,9 +178,9 @@ def _platform_font_candidates() -> list[str]:
     return candidates
 
 
-def resolve_font_path(explicit_path: str | None = None) -> str | None:
+def resolve_font_path(explicit_path: str | None = None, prefer_serif: bool = False) -> str | None:
     candidates = [explicit_path] if explicit_path else []
-    candidates.extend(_platform_font_candidates())
+    candidates.extend(_platform_font_candidates(prefer_serif=prefer_serif))
     for path in candidates:
         if path and Path(path).is_file():
             try:
@@ -199,7 +208,7 @@ def load_font(resolved_path: str | None, size: int) -> ImageFont.FreeTypeFont | 
     return ImageFont.load_default()
 
 
-def check_environment(explicit_font: str | None = None) -> tuple[bool, str | None]:
+def check_environment(explicit_font: str | None = None, prefer_serif: bool = False) -> tuple[bool, str | None]:
     """Verify ffmpeg and CJK font availability, returning (ffmpeg_ok, font_path)."""
     ffmpeg_bin = shutil.which("ffmpeg")
     if not ffmpeg_bin:
@@ -211,7 +220,7 @@ def check_environment(explicit_font: str | None = None) -> tuple[bool, str | Non
         print("[ERROR] ffmpeg not found in PATH.\nInstall ffmpeg first:\n" + hint, file=sys.stderr)
         return False, None
 
-    font_path = resolve_font_path(explicit_font)
+    font_path = resolve_font_path(explicit_font, prefer_serif=prefer_serif)
     if not font_path:
         print(
             "[WARN] No CJK font detected automatically; Chinese characters may render as boxes.\n"
@@ -219,6 +228,52 @@ def check_environment(explicit_font: str | None = None) -> tuple[bool, str | Non
             file=sys.stderr,
         )
     return True, font_path
+
+
+@functools.lru_cache(maxsize=2)
+def _build_midnight_emo_lut() -> list[int]:
+    """Build 768-entry RGB S-curve LUT deepening midnight-teal shadows and warming amber highlights."""
+    lut_r: list[int] = []
+    lut_g: list[int] = []
+    lut_b: list[int] = []
+    for i in range(256):
+        x = i / 255.0
+        # Deeper shadow contrast S-curve (crushes flat mid-lows into rich midnight shadow)
+        if x < 0.52:
+            c = 0.52 * ((x / 0.52) ** 1.24)
+        else:
+            c = 0.52 + 0.48 * (1.0 - ((1.0 - x) / 0.48) ** 1.12)
+        shadow_w = (1.0 - c) * c * 4.0  # peaks in lower midtones
+        hi_w = (c ** 1.6)
+        r = int(round((c * 255.0) - 7.0 * shadow_w + 8.0 * hi_w))
+        g = int(round((c * 255.0) + 1.0 * shadow_w + 2.0 * hi_w))
+        b = int(round((c * 255.0) + 8.0 * shadow_w - 7.0 * hi_w))
+        lut_r.append(max(0, min(255, r)))
+        lut_g.append(max(0, min(255, g)))
+        lut_b.append(max(0, min(255, b)))
+    return lut_r + lut_g + lut_b
+
+
+def _apply_cinema_emo_grade(img: Image.Image) -> Image.Image:
+    """Pre-bake 35mm midnight-emo color grade and warm highlight halation bloom onto a scene keyframe."""
+    rgb = img.convert("RGB")
+    w, h = rgb.size
+    # 1. Soft analog highlight halation bloom (computed at 1/4 resolution for speed)
+    sw, sh = max(16, w // 4), max(16, h // 4)
+    small = rgb.resize((sw, sh), Image.Resampling.BILINEAR)
+    r_ch, g_ch, b_ch = small.split()
+    # Keep bright warm pixels (>150) and tint toward warm amber-gold glow
+    r_hi = r_ch.point(lambda p: max(0, min(255, int((p - 145) * 1.45))) if p > 145 else 0)
+    g_hi = g_ch.point(lambda p: max(0, min(255, int((p - 150) * 1.05))) if p > 150 else 0)
+    b_hi = b_ch.point(lambda p: max(0, min(255, int((p - 165) * 0.55))) if p > 165 else 0)
+    a_hi = r_hi.point(lambda p: min(92, int(p * 0.42)))
+    bloom_small = Image.merge("RGBA", (r_hi, g_hi, b_hi, a_hi)).filter(ImageFilter.GaussianBlur(radius=14))
+    bloom = bloom_small.resize((w, h), Image.Resampling.BILINEAR)
+
+    # 2. Apply Midnight Emo S-curve LUT
+    graded_rgb = rgb.point(_build_midnight_emo_lut())
+    graded_rgba = graded_rgb.convert("RGBA")
+    return Image.alpha_composite(graded_rgba, bloom)
 
 
 def _safe_open_rgba(path: Path, max_pixels: int = MAX_IMAGE_PIXELS) -> Image.Image:
@@ -555,13 +610,19 @@ def draw_highlighted_line(
     underline_progress: float,
     theme: ThemePalette,
     line_seed: int = 1,
+    show_underline: bool = True,
+    letter_spacing: int = 0,
 ) -> None:
     if alpha <= 0 or visible_chars <= 0 or not text:
         return
 
-    font = _fit_font_for_line(draw, text, font_path, base_font_size)
-    full_box = draw.textbbox((0, 0), text, font=font)
-    total_w = full_box[2] - full_box[0]
+    font = _fit_font_for_line(draw, text, font_path, base_font_size, max_width=WIDTH - 140 - max(0, len(text) - 1) * letter_spacing)
+    if letter_spacing > 0:
+        char_widths = [draw.textbbox((0, 0), ch, font=font)[2] - draw.textbbox((0, 0), ch, font=font)[0] for ch in text]
+        total_w = sum(char_widths) + max(0, len(text) - 1) * letter_spacing
+    else:
+        full_box = draw.textbbox((0, 0), text, font=font)
+        total_w = full_box[2] - full_box[0]
     start_x = center_x - total_w // 2
 
     hi_mask = [False] * len(text)
@@ -580,15 +641,47 @@ def draw_highlighted_line(
             idx += 1
 
     visible_text = text[:visible_chars]
+    ascent, descent = font.getmetrics() if hasattr(font, "getmetrics") else (50, 12)
+    underline_y = y + ascent + max(10, descent // 2)
+
+    if letter_spacing > 0:
+        cur_x = start_x
+        hi_span_start: int | None = None
+        for c_idx, (ch, is_hi) in enumerate(zip(visible_text, hi_mask[:visible_chars])):
+            cb = draw.textbbox((0, 0), ch, font=font)
+            cw = cb[2] - cb[0]
+            color = (*theme.accent_primary, alpha) if is_hi else (*theme.text_primary, alpha)
+            shadow_alpha = int(alpha * min(0.85, theme.text_shadow_alpha + 0.18))
+            # Soft multi-offset film subtitle halo shadow
+            for ox, oy in ((0, 2), (2, 3), (-1, 2)):
+                draw.text((cur_x + ox, y + oy), ch, font=font, fill=(*theme.text_shadow, shadow_alpha))
+            draw.text((cur_x, y), ch, font=font, fill=color)
+            if is_hi and hi_span_start is None:
+                hi_span_start = cur_x
+            is_last_hi = is_hi and (c_idx + 1 == len(visible_text) or not hi_mask[c_idx + 1])
+            if is_last_hi and hi_span_start is not None and show_underline and underline_progress > 0.01:
+                _draw_hand_underline(
+                    draw,
+                    hi_span_start,
+                    cur_x + cw,
+                    underline_y,
+                    underline_progress,
+                    theme.accent_primary,
+                    alpha,
+                    seed=line_seed * 13 + c_idx,
+                )
+                hi_span_start = None
+            elif not is_hi:
+                hi_span_start = None
+            cur_x += cw + letter_spacing
+        return
+
     spans: list[tuple[str, bool]] = []
     for ch, is_hi in zip(visible_text, hi_mask[:visible_chars]):
         if spans and spans[-1][1] == is_hi:
             spans[-1] = (spans[-1][0] + ch, is_hi)
         else:
             spans.append((ch, is_hi))
-
-    ascent, descent = font.getmetrics() if hasattr(font, "getmetrics") else (50, 12)
-    underline_y = y + ascent + max(10, descent // 2)
 
     cur_x = start_x
     for span_idx, (segment, is_hi) in enumerate(spans):
@@ -599,7 +692,7 @@ def draw_highlighted_line(
         draw.text((cur_x + 2, y + 3), segment, font=font, fill=(*theme.text_shadow, shadow_alpha))
         draw.text((cur_x, y), segment, font=font, fill=color)
 
-        if is_hi and underline_progress > 0.01:
+        if is_hi and show_underline and underline_progress > 0.01:
             _draw_hand_underline(
                 draw,
                 cur_x,
@@ -1225,41 +1318,47 @@ def _render_scene_layer(
     tdraw = ImageDraw.Draw(text_layer)
     text_theme_name = sc.get("text_theme", theme.name)
     text_theme = THEMES.get(text_theme_name, theme)
+    is_cinema_emo = bool(sc.get("_cinema_emo", True))
+    hud_mode = str(sc.get("hud", "none" if is_cinema_emo else "full"))
+    show_underline = bool(sc.get("underline", not is_cinema_emo))
+    letter_spacing = int(sc.get("letter_spacing", 4 if is_cinema_emo else 0))
 
-    if header_tag:
-        tbox = tdraw.textbbox((0, 0), header_tag, font=font_tag)
-        tw = tbox[2] - tbox[0]
-        tdraw.text((WIDTH // 2 - tw // 2, 140), header_tag, font=font_tag, fill=(*text_theme.muted_ui, 195))
+    if hud_mode == "full":
+        if header_tag:
+            tbox = tdraw.textbbox((0, 0), header_tag, font=font_tag)
+            tw = tbox[2] - tbox[0]
+            tdraw.text((WIDTH // 2 - tw // 2, 140), header_tag, font=font_tag, fill=(*text_theme.muted_ui, 195))
 
-    bar_w = 180
-    bar_x0 = WIDTH // 2 - bar_w // 2
-    bar_y = 192
-    tdraw.line([(bar_x0, bar_y), (bar_x0 + bar_w, bar_y)], fill=(*text_theme.muted_ui, 75), width=3)
-    prog = min(1.0, t / max(0.01, total_duration))
-    tdraw.line(
-        [(bar_x0, bar_y), (bar_x0 + int(bar_w * prog), bar_y)],
-        fill=(*text_theme.accent_primary, 215),
-        width=3,
-    )
+        bar_w = 180
+        bar_x0 = WIDTH // 2 - bar_w // 2
+        bar_y = 192
+        tdraw.line([(bar_x0, bar_y), (bar_x0 + bar_w, bar_y)], fill=(*text_theme.muted_ui, 75), width=3)
+        prog = min(1.0, t / max(0.01, total_duration))
+        tdraw.line(
+            [(bar_x0, bar_y), (bar_x0 + int(bar_w * prog), bar_y)],
+            fill=(*text_theme.accent_primary, 215),
+            width=3,
+        )
 
     ts_label = sc.get("timestamp")
-    if ts_label:
+    if ts_label and hud_mode in ("full", "minimal"):
         ts_font = load_font(font_path, 22)
         ts_box = tdraw.textbbox((0, 0), str(ts_label), font=ts_font)
         ts_w = ts_box[2] - ts_box[0]
-        tdraw.text((WIDTH // 2 - ts_w // 2, 212), str(ts_label), font=ts_font, fill=(*text_theme.accent_primary, 175))
+        ts_y = 212 if hud_mode == "full" else 148
+        tdraw.text((WIDTH // 2 - ts_w // 2, ts_y), str(ts_label), font=ts_font, fill=(*text_theme.accent_primary, 155))
 
     lines: list[str] = sc.get("lines", [])
     highlights: list[str] = sc.get("highlight", [])
-    text_anim = sc.get("text_anim", "beat_lines")
-    line_spacing = 108
+    text_anim = sc.get("text_anim", "fade_up" if is_cinema_emo else "beat_lines")
+    line_spacing = 104 if is_cinema_emo else 108
     text_pos = sc.get("text_pos", "top")
     if text_pos == "bottom":
-        anchor_y = 1480
+        anchor_y = 1520
     elif text_pos == "center":
         anchor_y = 940
     else:
-        anchor_y = 430 if is_full_frame else 490
+        anchor_y = 390 if is_cinema_emo else (430 if is_full_frame else 490)
     base_text_y = anchor_y - (len(lines) * line_spacing) // 2
 
     if text_anim == "typewriter_beat":
@@ -1287,6 +1386,8 @@ def _render_scene_layer(
                 ul_prog,
                 text_theme,
                 line_seed=idx_l + 1,
+                show_underline=show_underline,
+                letter_spacing=letter_spacing,
             )
     else:
         for idx_l, line_str in enumerate(lines):
@@ -1296,9 +1397,9 @@ def _render_scene_layer(
                 if local_beat < appear_beat:
                     continue
                 lt = (local_beat - appear_beat) * beat_sec
-                p = ease_out_cubic(min(1.0, lt / 0.28))
+                p = ease_out_cubic(min(1.0, lt / (0.42 if is_cinema_emo else 0.28)))
                 alpha = int(255 * p)
-                y_off = int((1.0 - p) * 26)
+                y_off = int((1.0 - p) * (18 if is_cinema_emo else 26))
                 ul_prog = ease_out_cubic(min(1.0, max(0.0, (local_beat - appear_beat - 0.35) / 0.65)))
             elif text_anim == "word_pop":
                 appear_beat = idx_l * 1.0
@@ -1310,14 +1411,14 @@ def _render_scene_layer(
                 y_off = int((1.0 - p) * 20)
                 ul_prog = ease_out_cubic(min(1.0, max(0.0, (local_beat - appear_beat - 0.3) / 0.6)))
             elif text_anim == "slam_center":
-                p = ease_out_cubic(min(1.0, local_t / 0.22))
+                p = ease_out_cubic(min(1.0, local_t / (0.36 if is_cinema_emo else 0.22)))
                 alpha = int(255 * p)
                 y_off = int((1.0 - p) * 14)
                 ul_prog = ease_out_cubic(min(1.0, max(0.0, (local_beat - 0.6) / 0.75)))
             else:  # fade_up
-                p = ease_out_cubic(min(1.0, local_t / 0.45))
+                p = ease_out_cubic(min(1.0, local_t / 0.52))
                 alpha = int(255 * p)
-                y_off = int((1.0 - p) * 20)
+                y_off = int((1.0 - p) * 18)
                 ul_prog = ease_out_cubic(min(1.0, max(0.0, (local_beat - 0.55) / 0.75)))
 
             draw_highlighted_line(
@@ -1333,18 +1434,21 @@ def _render_scene_layer(
                 ul_prog,
                 text_theme,
                 line_seed=idx_l + 1,
+                show_underline=show_underline,
+                letter_spacing=letter_spacing,
             )
 
-    cur_measure_beat = int(t / beat_sec) % 4
-    dot_gap = 28
-    dots_start_x = WIDTH // 2 - (3 * dot_gap) // 2
-    for bi in range(4):
-        cx = dots_start_x + bi * dot_gap
-        cy = 1765
-        is_cur = (bi == cur_measure_beat)
-        r = 5 if is_cur else 3
-        col = (*text_theme.accent_primary, int(190 + 60 * beat_pulse)) if is_cur else (*text_theme.muted_ui, 90)
-        tdraw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=col)
+    if hud_mode == "full":
+        cur_measure_beat = int(t / beat_sec) % 4
+        dot_gap = 28
+        dots_start_x = WIDTH // 2 - (3 * dot_gap) // 2
+        for bi in range(4):
+            cx = dots_start_x + bi * dot_gap
+            cy = 1765
+            is_cur = (bi == cur_measure_beat)
+            r = 5 if is_cur else 3
+            col = (*text_theme.accent_primary, int(190 + 60 * beat_pulse)) if is_cur else (*text_theme.muted_ui, 90)
+            tdraw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=col)
 
     return Image.alpha_composite(stage, text_layer)
 
@@ -1427,6 +1531,11 @@ def compile_timeline(
     scene_cache: dict[str, Image.Image] = {}
     oversample_w, oversample_h = int(WIDTH * 1.14), int(HEIGHT * 1.14)
     default_max_chars = max(4, int(data.get("max_chars_per_line", 14)))
+    is_cinema_emo = str(data.get("style", "cinema_emo")) == "cinema_emo"
+    default_grade = str(data.get("color_grade", "midnight_emo" if is_cinema_emo else "none"))
+    default_hud = str(data.get("hud", "none" if is_cinema_emo else "full"))
+    default_underline = bool(data.get("underline", not is_cinema_emo))
+    default_spacing = int(data.get("letter_spacing", 4 if is_cinema_emo else 0))
 
     for idx_s, sc in enumerate(scenes, 1):
         if not isinstance(sc, dict):
@@ -1485,13 +1594,17 @@ def compile_timeline(
         fg_frames: list[Image.Image] = []
         sticker_frames: list[Image.Image] = []
 
+        shot_grade = str(sc.get("color_grade", default_grade))
         for raw_sc in raw_scene_list:
             resolved_scene = resolve_asset_path(str(raw_sc), base_dir, skill_dir)
             if load_images:
-                s_key = str(resolved_scene.resolve())
+                s_key = f"{resolved_scene.resolve()}::{shot_grade}"
                 if s_key not in scene_cache:
                     raw_img = _safe_open_rgba(resolved_scene)
-                    scene_cache[s_key] = _cover_resize(raw_img, oversample_w, oversample_h)
+                    resized_img = _cover_resize(raw_img, oversample_w, oversample_h)
+                    if shot_grade == "midnight_emo":
+                        resized_img = _apply_cinema_emo_grade(resized_img)
+                    scene_cache[s_key] = resized_img
                 scene_frames.append(scene_cache[s_key])
 
         for raw_fg in raw_fg_list:
@@ -1526,6 +1639,10 @@ def compile_timeline(
         compiled_scenes.append({
             **sc,
             "_vis_src": vis_src,
+            "_cinema_emo": is_cinema_emo,
+            "hud": sc.get("hud", default_hud),
+            "underline": sc.get("underline", default_underline),
+            "letter_spacing": sc.get("letter_spacing", default_spacing),
             "lines": wrapped_lines,
             "highlight": highlights,
             "start_t": start_t,
@@ -1553,11 +1670,12 @@ def render_video(
     if audio_path is not None and not audio_path.is_file():
         raise FileNotFoundError(f"Custom audio file not found: {audio_path}")
 
-    ok, resolved_font = check_environment(font_path)
+    data: Any = json.loads(timeline_path.read_text(encoding="utf-8"))
+    is_cinema_emo = str(data.get("style", "cinema_emo") if isinstance(data, dict) else "cinema_emo") == "cinema_emo"
+    ok, resolved_font = check_environment(font_path, prefer_serif=is_cinema_emo)
     if not ok:
         raise SystemExit(1)
 
-    data: Any = json.loads(timeline_path.read_text(encoding="utf-8"))
     base_dir = timeline_path.parent
     skill_dir = Path(__file__).resolve().parent.parent
 
@@ -1571,7 +1689,7 @@ def render_video(
     )
     beat_sec = 60.0 / bpm
     header_tag = str(data.get("tag", ""))
-    base_font_size = max(34, min(120, int(data.get("font_size", 58))))
+    base_font_size = max(34, min(120, int(data.get("font_size", 52 if is_cinema_emo else 58))))
 
     total_duration = compiled_scenes[-1]["end_t"]
     total_frames = max(1, int(round(total_duration * fps)))
@@ -1592,7 +1710,7 @@ def render_video(
             bg_scrim_alpha=int(data.get("bg_scrim_alpha", 120)),
         ),
         warm_glow=build_warm_glow(theme, 440),
-        vignette=_build_vignette(82),
+        vignette=_build_vignette(108 if is_cinema_emo else 82),
         scrims={
             "top": _build_text_scrim("top", theme),
             "bottom": _build_text_scrim("bottom", theme),

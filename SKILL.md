@@ -167,45 +167,68 @@ gradient, texture, noise, speckles, shadows, floor plane, green/magenta color sp
    - Confirm no green/magenta fringe remains at 100% zoom.
    - Confirm internal kraft-brown, dark charcoal hoodie, white hands, and halftone areas remain 100% opaque (`alpha = 255`).
 
-## Mode C workflow — beat-synced Motion Comic video assembly
+## Mode C workflow — beat-synced Emo Cinema video assembly (`cinema_emo`)
 
-**Core principles**:
+> **Style Boundary**: Mode A and Mode B strictly keep the clean `/oil-visual` editorial manga-ink style above. **Only when entering Mode C (video mode)** does the visual language switch into **Late-Night Emo Cinema (`cinema_emo`)**: 80/20 chiaroscuro lighting, atmospheric film haze & soft highlight halation, watercolor-charcoal grain, off-center/back/POV cinematic angles, and pure HUD-free literary serif subtitles.
+
+### Core principles
 1. **Bespoke scenes per script (`一文案一分镜`)**: Never lazily reuse the same 3 stock stickers or another script's `studio/scenes/` folder for a new copywriting prompt. Every new script must first extract its own setting, weather, time progression, lighting arc, and concrete props from the copy's semantics.
 2. **Length-driven duration & pacing (`文案定长`)**: Scale scene count and video duration dynamically with copy length (keeping average shot duration `2.0–4.5s` so visuals never stagnate):
    - **Short quote (≤ 25 Chinese chars / 2–3 lines)**: `3–4` shots · `10–15s` (`4–6` beats/shot).
    - **Medium monologue (26–65 chars / 4–7 lines)**: `5–8` shots · `16–28s` (`2–4` beats for transitions, `4–6` beats for emotional landings).
    - **Long narrative (65–130+ chars / 8–14 lines)**: `8–15` shots · `30–55s` (cut every `8–14` chars; mix newly generated hero scenes & object cutaways with B-cam tighter crops on key rooms to preserve visual freshness and style stability).
-3. **Shot scale diversity (`相邻景别轮换`)**: Never place two consecutive shots in the same framing. Alternate across:
-   - `Wide` (establishing space/weather),
-   - `Medium` (character action),
-   - `Object Cutaway` (hands, cold mug, glowing phone, clock, rain window — zero face),
-   - `Close-up` (emotion + blink),
-   - `Back / POV` (release/epilogue).
-4. **Companion & prop micro-interactions**: In addition to protagonist motion (`natural_blink`, `fg_parallax`), give the black cat and scene props subtle life (`cat_zzz`, `purr_waves`, cat blink, `prop_pulse` on phone/clock/lamp, `coffee_steam`, `rain_glass`, `sunbeams`).
+3. **Shot scale & angle diversity (`相邻景别轮换`)**: Never place two consecutive shots in the same framing, and avoid generic centered front-facing standing poses. Alternate across:
+   - `Wide / Lonely Space` (establishing vast late-night environment, silhouette, back view, or window reflection),
+   - `Medium / Off-Center Action` (character in lower/side third with deep shadow headroom),
+   - `Object Cutaway` (hands, cold mug, glowing phone, raindrops merging on glass, umbrella shadow boundary — zero face),
+   - `Emotional Close-up` (half-shadowed face, rain on glasses, hand over chest + natural blink),
+   - `Back / POV Finale` (warm streetlamp or dawn light release).
+4. **Companion & prop micro-interactions**: Pair protagonist motion (`natural_blink`, `fg_parallax`) with black cat and prop life (`cat_zzz`, `purr_waves`, cat blink, `prop_pulse` on phone/clock/lamp, `coffee_steam`, `rain_glass`, `sunbeams`).
 
-### Execution steps
+### Mode C Emo Cinema Prompt Style Anchor (for Mode C scene generation only)
+
+When building prompts for Mode C `scene_image` keyframes (whether via external Prompt Pack or built-in generator), attach `assets/master_ref.jpg` as character reference and append this **Mode C Cinema Emo Anchor** instead of the Mode A explainer anchor:
+
+```text
+Moody late-night anime film still (Wong Kar-wai / Makoto Shinkai / Lo-Fi indie animation atmosphere) anchored to the Paperbag & Black Cat character design of the reference image. 80/20 chiaroscuro lighting: 80% of the frame immersed in deep midnight slate-teal and charcoal shadow, illuminated only by a single emotional light source (warm amber streetlamp, desk lamp rim-light, or cold smartphone glow) with soft analog highlight halation and atmospheric mist/rain haze. Hand-drawn charcoal ink outlines with organic watercolor-ink wash, subtle circular halftone shadow texture, and 35mm film grain. Cinematic composition with generous dark negative space in the upper third for film subtitles. Vertical 9:16 aspect ratio. No text, no subtitles, no speech bubbles, no watermark.
+```
+
+### Two execution paths for Mode C scene generation
+
+Choose **Path A (External Prompt Pack Handoff)** when the user wants maximum visual atmosphere from an external generator (e.g. Gemini Nano Banana 2.5, Midjourney, Flux, Jimeng) or when built-in image quota is limited; choose **Path B (Built-in Auto Generation)** when the user asks for one-click internal generation.
+
+#### Path A — External Artist Handoff (`外置生图协作模式`)
+1. Produce the **Director Breakdown** and write a ready-to-copy **Prompt Pack Markdown file** (`studio/<project>_prompt_pack.md`) containing for each hero keyframe:
+   - Target filename (e.g. `studio/scenes/<project>/s1.jpg`), aspect ratio (`9:16`), and whether to upload `assets/master_ref.jpg` as reference image;
+   - Copy-pasteable **Chinese Prompt** and **English Prompt** (incorporating the 80/20 chiaroscuro Mode C Cinema Emo Anchor and upper-third subtitle negative space);
+   - Which shots in the timeline will use the full image vs. B-cam close-up crop.
+2. Pause and hand the Prompt Pack to the user.
+3. Once the user drops the generated images into `studio/scenes/<project>/` (or uploads them in chat), generate any B-cam crops and surgical `natural_blink` frames, validate with `--validate`, and render the final video.
+
+#### Path B — Built-in Auto Generation (`内置一键直出模式`)
+1. Generate the hero keyframes via `image-generator` using the Mode C Cinema Emo Anchor above, then proceed directly to B-cam cropping, blink frame generation, and video rendering.
+
+### Video assembly & `cinema_emo` rendering steps
 
 1. Run dependency and cross-platform CJK font self-check if needed:
    ```bash
    python3 scripts/render_emo_video.py --check
    ```
-2. Produce a **Director Breakdown** mapping each copy line to: `shot_scale`, `setting & props`, `lighting`, `beats`, `camera`, `transition`, and `fx`.
-3. Choose visual source per scene:
-   - **Motion Comic full-frame mode (`scene_image` / `scene_frames`) — preferred**: Bespoke 9:16 cinematic keyframes per scene with organic Ken Burns drift, `natural_blink` frame pairs (protagonist + cat when awake), and `light_pos` breathing glow.
-   - **2.5D Parallax split mode (`scene_image` + `fg_image` / `fg_frames`)**: Background environment drifts at `1.0x` while transparent foreground subject moves at `fg_parallax` (`1.45x–1.6x`) with independent `motion` (`sigh_sway`, `alive_idle`).
-   - **Sticker mode (`sticker` / `frames`)**: Cutout pose composition over `late_night` or `paper_cream` theme backdrop.
-4. Configure `timeline.json`:
-   - `theme`: `"late_night"` (charcoal-teal) or `"paper_cream"` (warm journal paper), or provide `"background"` / `--bg` for a custom backdrop image.
+2. Configure `timeline.json` (defaults to `"style": "cinema_emo"`):
+   - `"style": "cinema_emo"` (default): Automatically enables literary serif typography (`Songti` / `SimSun` / `NotoSerifCJK`) with `+4px` character tracking, hides PPT-like HUD elements (`"hud": "none"` — no top progress bar, no header banner, no bottom beat dots), disables orange teacher-underlines (`"underline": false`), and pre-bakes 35mm midnight-teal/amber S-curve color grading + soft highlight halation bloom (`"color_grade": "midnight_emo"`).
+   - Set `"style": "standard"` (or override `"hud": "full"`, `"underline": true`, `"color_grade": "none"`) only when traditional explainer HUD overlays are desired.
    - Per-scene motion & camera: `motion` (`alive_idle`, `bounce_in`, `beat_nod`, `zoom_punch`, `sigh_sway`, `calm_float`), `camera` (`push_in`, `pull_out`, `drift_diag`, `pan_left`, `pan_right`, `pan_up`, `pan_down`, `breathe`, `static`), and `transition` (`crossfade`, `luma_fade`, `warm_dissolve`, `wipe_up`, `ink_flash`, `cut`).
    - Sensory & companion micro-effects (`fx`): `coffee_steam` (`steam_pos`), `sunbeams`, `bokeh_depth`, `rain_glass`, `lamp_flicker`, `cat_zzz` (`cat_pos`), `purr_waves` (`cat_pos`), `prop_pulse` (`prop_pos`, `prop_color`), `film_grain`.
-   - Optional layout & narrative cues: `timestamp` (e.g. `"02:15 AM"`), `light_pos` (`[x_ratio, y_ratio]`), `text_pos` (`"top"`, `"bottom"`, `"center"`), and `doodle` (`thought_dots`, `sigh_lines`, `warm_sparks`, `steam_wisps`, `rain_streaks`, `bracket_emphasis`).
-   - Kinetic text (`text_anim`): `typewriter_beat`, `beat_lines`, `word_pop`, `slam_center`, `fade_up`.
-5. Render both the Douyin-ready silent MP4 and local beat-preview MP4:
+   - Kinetic text (`text_anim`): `fade_up`, `beat_lines`, `typewriter_beat`, `word_pop`, `slam_center`.
+3. Validate pacing, line-wrapping, and asset paths before rendering:
+   ```bash
+   python3 scripts/render_emo_video.py --validate --timeline timeline.json
+   ```
+4. Render both the Douyin-ready silent MP4 and local beat-preview MP4:
    ```bash
    python3 scripts/render_emo_video.py \
      --timeline timeline.json \
      --out output/video \
-     --theme late_night \
      --fps 30
    ```
 
