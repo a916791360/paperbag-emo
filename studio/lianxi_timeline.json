@@ -2,7 +2,7 @@
   "bpm": 80,
   "theme": "late_night",
   "style": "cinema_emo",
-  "hud": "minimal",
+  "hud": "none",
   "underline": true,
   "tag": "深夜纸袋人 · 情绪电影",
   "transition_sec": 0.56,

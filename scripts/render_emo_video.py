@@ -1424,7 +1424,7 @@ def _render_typography_layer(
     text_theme_name = sc.get("text_theme", theme.name)
     text_theme = THEMES.get(text_theme_name, theme)
     is_cinema_emo = bool(sc.get("_cinema_emo", True))
-    hud_mode = str(sc.get("hud", "minimal" if is_cinema_emo else "full"))
+    hud_mode = str(sc.get("hud", "none" if is_cinema_emo else "full"))
     show_underline = bool(sc.get("underline", True))
     letter_spacing = int(sc.get("letter_spacing", 4 if is_cinema_emo else 0))
 
@@ -1680,7 +1680,7 @@ def compile_timeline(
     default_max_chars = max(4, int(data.get("max_chars_per_line", 14)))
     is_cinema_emo = str(data.get("style", "cinema_emo")) == "cinema_emo"
     default_grade = str(data.get("color_grade", "midnight_emo" if is_cinema_emo else "none"))
-    default_hud = str(data.get("hud", "minimal" if is_cinema_emo else "full"))
+    default_hud = str(data.get("hud", "none" if is_cinema_emo else "full"))
     default_underline = bool(data.get("underline", True))
     default_spacing = int(data.get("letter_spacing", 4 if is_cinema_emo else 0))
 
