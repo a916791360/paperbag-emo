@@ -1,0 +1,258 @@
+{
+  "bpm": 76,
+  "theme": "late_night",
+  "style": "cinema_emo",
+  "hud": "none",
+  "underline": true,
+  "tag": "深夜纸袋人 · 克制与想念",
+  "transition_sec": 0.54,
+  "scenes": [
+    {
+      "beats": 5.5,
+      "scene_frames": [
+        "studio/scenes/xiangni/s1_draft_phone.jpg",
+        "studio/scenes/xiangni/s1_draft_phone_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 2.1,
+      "lines": [
+        "只要你肯联系我，",
+        "我就敢再勇敢一次，",
+        "重蹈覆辙也没事。"
+      ],
+      "highlight": ["再勇敢一次", "重蹈覆辙"],
+      "camera": "push_in",
+      "prop_pos": "auto",
+      "prop_color": "amber",
+      "fx": ["prop_pulse", "film_grain"],
+      "text_anim": "typewriter_beat",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4,
+      "scene_image": "studio/scenes/xiangni/s2_screen_dark.jpg",
+      "lines": [
+        "你不联系我，",
+        "那就顺其自然。"
+      ],
+      "highlight": ["顺其自然"],
+      "camera": "pull_out",
+      "transition": "luma_fade",
+      "fx": ["film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4.5,
+      "scene_frames": [
+        "studio/scenes/xiangni/s3_window_restraint.jpg",
+        "studio/scenes/xiangni/s3_window_restraint_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 2.2,
+      "lines": [
+        "实不相瞒，我真的特别想你，",
+        "但也能克制。"
+      ],
+      "highlight": ["特别想你", "也能克制"],
+      "camera": "push_in",
+      "transition": "crossfade",
+      "light_pos": "auto",
+      "cat_pos": [0.33, 0.78],
+      "fx": ["cat_zzz", "bokeh_depth", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 5.5,
+      "scene_image": "studio/scenes/xiangni/s4_bad_days_cutaway.jpg",
+      "lines": [
+        "本来打算告诉你，",
+        "你不在我身边的这段日子",
+        "我遇到的所有糟糕事，"
+      ],
+      "highlight": ["不在我身边", "所有糟糕事"],
+      "camera": "pan_left",
+      "transition": "luma_fade",
+      "light_pos": "auto",
+      "fx": ["film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4.5,
+      "scene_frames": [
+        "studio/scenes/xiangni/s3_window_restraint.jpg",
+        "studio/scenes/xiangni/s3_window_restraint_blink.jpg"
+      ],
+      "crop_box": [0.18, 0.12, 0.94, 0.88],
+      "frame_mode": "natural_blink",
+      "blink_interval": 2.0,
+      "lines": [
+        "但最后我只想告诉你，",
+        "我真的好想你。"
+      ],
+      "highlight": ["真的好想你"],
+      "camera": "push_in",
+      "transition": "crossfade",
+      "fx": ["bokeh_depth", "film_grain"],
+      "text_anim": "slam_center",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4.5,
+      "scene_frames": [
+        "studio/scenes/xiangni/s6_rain_glass_face.jpg",
+        "studio/scenes/xiangni/s6_rain_glass_face_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 2.1,
+      "lines": [
+        "不是那种汹涌到",
+        "可以让我立刻流泪的想念，"
+      ],
+      "highlight": ["立刻流泪"],
+      "camera": "push_in",
+      "transition": "crossfade",
+      "light_pos": "auto",
+      "fx": ["rain_glass", "bokeh_depth", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4.5,
+      "scene_image": "studio/scenes/xiangni/s6_rain_glass_face.jpg",
+      "crop_box": [0.14, 0.12, 0.86, 0.84],
+      "lines": [
+        "如果是那样倒也痛快，",
+        "哭出来痛就有了出口。"
+      ],
+      "highlight": ["痛就有了出口"],
+      "camera": "drift_diag",
+      "transition": "crossfade",
+      "fx": ["rain_glass", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4.5,
+      "scene_frames": [
+        "studio/scenes/xiangni/s7_headphones_daze.jpg",
+        "studio/scenes/xiangni/s7_headphones_daze_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 2.2,
+      "lines": [
+        "只是在发呆的间隙，",
+        "在听到某句歌词的瞬间，"
+      ],
+      "highlight": ["发呆的间隙", "某句歌词"],
+      "camera": "pan_right",
+      "transition": "luma_fade",
+      "light_pos": "auto",
+      "fx": ["lamp_flicker", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4,
+      "scene_image": "studio/scenes/xiangni/s9_lonely_crowd_walk.jpg",
+      "lines": [
+        "看身边朋友都有人陪的时候，"
+      ],
+      "highlight": ["都有人陪"],
+      "camera": "push_in",
+      "transition": "crossfade",
+      "light_pos": "auto",
+      "fx": ["rain_glass", "bokeh_depth", "film_grain"],
+      "text_anim": "typewriter_beat",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4.5,
+      "scene_image": "studio/scenes/xiangni/s7_headphones_daze.jpg",
+      "crop_box": [0.12, 0.12, 0.86, 0.86],
+      "lines": [
+        "听到你爱听的歌的时候，",
+        "永远都会想起你。"
+      ],
+      "highlight": ["你爱听的歌", "都会想起你"],
+      "camera": "push_in",
+      "transition": "crossfade",
+      "cat_pos": [0.28, 0.64],
+      "fx": ["purr_waves", "film_grain"],
+      "text_anim": "slam_center",
+      "text_pos": "top"
+    },
+    {
+      "beats": 5.5,
+      "scene_frames": [
+        "studio/scenes/xiangni/s8_empty_chair.jpg",
+        "studio/scenes/xiangni/s8_empty_chair_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 2.1,
+      "lines": [
+        "随之而来的就是那种熟悉的",
+        "淡淡的痛，",
+        "它提醒我我们之间已经结束，"
+      ],
+      "highlight": ["淡淡的痛", "已经结束"],
+      "camera": "push_in",
+      "transition": "luma_fade",
+      "light_pos": "auto",
+      "cat_pos": [0.18, 0.75],
+      "fx": ["cat_zzz", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 5.5,
+      "scene_image": "studio/scenes/xiangni/s8_empty_chair.jpg",
+      "crop_box": [0.14, 0.14, 0.96, 0.92],
+      "lines": [
+        "提醒我那些可以随时和你分享一切、",
+        "亲密无间的日子",
+        "已经永远地过去了。"
+      ],
+      "highlight": ["亲密无间", "永远地过去了"],
+      "camera": "pan_right",
+      "transition": "crossfade",
+      "light_pos": "auto",
+      "fx": ["lamp_flicker", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4.5,
+      "scene_image": "studio/scenes/xiangni/s9_city_wishes.jpg",
+      "crop_box": [0.06, 0.10, 0.82, 0.88],
+      "lines": [
+        "于是我只能默默的猜测着",
+        "你没有我的日子是什么样的。"
+      ],
+      "highlight": ["没有我的日子"],
+      "camera": "drift_diag",
+      "transition": "luma_fade",
+      "fx": ["bokeh_depth", "film_grain"],
+      "text_anim": "typewriter_beat",
+      "text_pos": "top"
+    },
+    {
+      "beats": 5.5,
+      "scene_image": "studio/scenes/xiangni/s9_city_wishes.jpg",
+      "lines": [
+        "希望你少点烦恼少点忧伤，",
+        "也祝你好运，不管做什么决定。"
+      ],
+      "highlight": ["少点忧伤", "祝你好运"],
+      "camera": "pull_out",
+      "transition": "warm_dissolve",
+      "light_pos": "auto",
+      "cat_pos": [0.46, 0.82],
+      "fx": ["purr_waves", "bokeh_depth", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    }
+  ]
+}
