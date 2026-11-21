@@ -406,10 +406,10 @@ def resolve_asset_path(
 
 
 def _parse_pos_pair(raw: Any, default: tuple[float, float], field_name: str = "pos") -> tuple[float, float]:
-    if raw is None:
+    if raw is None or raw == "auto":
         return default
     if not isinstance(raw, (list, tuple)) or len(raw) != 2:
-        raise ValueError(f"Field '{field_name}' must be a [x_ratio, y_ratio] pair, got: {raw!r}")
+        raise ValueError(f"Field '{field_name}' must be a [x_ratio, y_ratio] pair or 'auto', got: {raw!r}")
     try:
         x = float(raw[0])
         y = float(raw[1])
@@ -418,6 +418,47 @@ def _parse_pos_pair(raw: Any, default: tuple[float, float], field_name: str = "p
     if not (math.isfinite(x) and math.isfinite(y)):
         raise ValueError(f"Field '{field_name}' contains non-finite coordinates: {raw!r}")
     return max(-0.5, min(1.5, x)), max(-0.5, min(1.5, y))
+
+
+def _parse_crop_box(raw: Any, field_name: str = "crop_box") -> tuple[float, float, float, float] | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, (list, tuple)) or len(raw) != 4:
+        raise ValueError(f"Field '{field_name}' must be [x0, y0, x1, y1] in [0, 1], got: {raw!r}")
+    try:
+        x0, y0, x1, y1 = (float(v) for v in raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Field '{field_name}' contains non-numeric coordinates: {raw!r}") from exc
+    if not (all(math.isfinite(v) for v in (x0, y0, x1, y1)) and 0.0 <= x0 < x1 <= 1.0 and 0.0 <= y0 < y1 <= 1.0):
+        raise ValueError(f"Field '{field_name}' must satisfy 0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1, got: {raw!r}")
+    return x0, y0, x1, y1
+
+
+def _detect_warm_light_anchor(
+    img: Image.Image,
+    default: tuple[float, float] = (0.5, 0.55),
+) -> tuple[float, float]:
+    """Automatically detect the brightest warm light centroid (streetlamp, phone screen, candle) in a scene."""
+    grid = 64
+    small = img.convert("RGB").resize((grid, grid), Image.Resampling.BILINEAR)
+    px = small.load()
+    assert px is not None
+    total_w = 0.0
+    sum_x = 0.0
+    sum_y = 0.0
+    for gy in range(int(grid * 0.20), int(grid * 0.92)):
+        for gx in range(int(grid * 0.06), int(grid * 0.94)):
+            r, g, b = px[gx, gy]
+            warmth = max(0, r - b) + max(0, g - b) * 0.5
+            luma = 0.35 * r + 0.45 * g + 0.20 * b
+            if r > 125 and warmth > 28 and luma > 105:
+                weight = ((warmth / 255.0) ** 1.6) * ((luma / 255.0) ** 2.0)
+                total_w += weight
+                sum_x += (gx + 0.5) / grid * weight
+                sum_y += (gy + 0.5) / grid * weight
+    if total_w <= 1e-4:
+        return default
+    return round(sum_x / total_w, 3), round(sum_y / total_w, 3)
 
 
 def _draw_hand_underline(
@@ -450,9 +491,11 @@ def _draw_hand_underline(
             break
 
     if len(pts_main) >= 2:
-        draw.line(pts_main, fill=(*color, int(alpha * 0.92)), width=5, joint="curve")
+        # Soft warm halation aura under the brush stroke
+        draw.line(pts_main, fill=(*color, int(alpha * 0.24)), width=11, joint="curve")
+        draw.line(pts_main, fill=(*color, int(alpha * 0.94)), width=5, joint="curve")
     if len(pts_sub) >= 2 and progress > 0.25:
-        draw.line(pts_sub, fill=(*color, int(alpha * 0.42)), width=2, joint="curve")
+        draw.line(pts_sub, fill=(*color, int(alpha * 0.44)), width=2, joint="curve")
 
 
 def _is_inside_highlight(text: str, cut_idx: int, highlights: list[str] | None) -> bool:
@@ -611,18 +654,30 @@ def draw_highlighted_line(
     theme: ThemePalette,
     line_seed: int = 1,
     show_underline: bool = True,
-    letter_spacing: int = 0,
+    letter_spacing: int = 4,
+    line_elapsed: float | None = None,
+    char_step_sec: float = 0.042,
+    char_fade_sec: float = 0.32,
+    anim_style: str = "beat_lines",
+    t: float = 0.0,
+    beat_pulse: float = 0.0,
 ) -> None:
     if alpha <= 0 or visible_chars <= 0 or not text:
         return
 
-    font = _fit_font_for_line(draw, text, font_path, base_font_size, max_width=WIDTH - 140 - max(0, len(text) - 1) * letter_spacing)
-    if letter_spacing > 0:
-        char_widths = [draw.textbbox((0, 0), ch, font=font)[2] - draw.textbbox((0, 0), ch, font=font)[0] for ch in text]
-        total_w = sum(char_widths) + max(0, len(text) - 1) * letter_spacing
-    else:
-        full_box = draw.textbbox((0, 0), text, font=font)
-        total_w = full_box[2] - full_box[0]
+    eff_spacing = max(0, int(letter_spacing))
+    font = _fit_font_for_line(
+        draw,
+        text,
+        font_path,
+        base_font_size,
+        max_width=WIDTH - 140 - max(0, len(text) - 1) * eff_spacing,
+    )
+    char_widths = [
+        draw.textbbox((0, 0), ch, font=font)[2] - draw.textbbox((0, 0), ch, font=font)[0]
+        for ch in text
+    ]
+    total_w = sum(char_widths) + max(0, len(text) - 1) * eff_spacing
     start_x = center_x - total_w // 2
 
     hi_mask = [False] * len(text)
@@ -644,66 +699,98 @@ def draw_highlighted_line(
     ascent, descent = font.getmetrics() if hasattr(font, "getmetrics") else (50, 12)
     underline_y = y + ascent + max(10, descent // 2)
 
-    if letter_spacing > 0:
-        cur_x = start_x
-        hi_span_start: int | None = None
-        for c_idx, (ch, is_hi) in enumerate(zip(visible_text, hi_mask[:visible_chars])):
-            cb = draw.textbbox((0, 0), ch, font=font)
-            cw = cb[2] - cb[0]
-            color = (*theme.accent_primary, alpha) if is_hi else (*theme.text_primary, alpha)
-            shadow_alpha = int(alpha * min(0.85, theme.text_shadow_alpha + 0.18))
-            # Soft multi-offset film subtitle halo shadow
-            for ox, oy in ((0, 2), (2, 3), (-1, 2)):
-                draw.text((cur_x + ox, y + oy), ch, font=font, fill=(*theme.text_shadow, shadow_alpha))
-            draw.text((cur_x, y), ch, font=font, fill=color)
-            if is_hi and hi_span_start is None:
-                hi_span_start = cur_x
-            is_last_hi = is_hi and (c_idx + 1 == len(visible_text) or not hi_mask[c_idx + 1])
-            if is_last_hi and hi_span_start is not None and show_underline and underline_progress > 0.01:
+    cur_x = start_x
+    hi_span_start: int | None = None
+    hi_span_last_idx: int = 0
+
+    for c_idx, (ch, is_hi) in enumerate(zip(visible_text, hi_mask[:visible_chars])):
+        cw = char_widths[c_idx]
+
+        # Per-character kinetic entrance & continuous heartbeat breathing
+        if line_elapsed is not None:
+            c_dt = line_elapsed - c_idx * char_step_sec
+            if c_dt <= 0.0:
+                cur_x += cw + eff_spacing
+                continue
+            raw_p = min(1.0, c_dt / max(0.05, char_fade_sec))
+            if anim_style in ("word_pop", "slam_center"):
+                char_p = ease_out_back(raw_p)
+                alpha_p = ease_out_cubic(min(1.0, c_dt / max(0.05, char_fade_sec * 0.65)))
+                ent_dy = int(round((1.0 - char_p) * 26.0))
+            elif anim_style == "typewriter_beat":
+                char_p = ease_out_cubic(raw_p)
+                alpha_p = char_p
+                ent_dy = int(round((1.0 - char_p) * 18.0))
+            else:
+                char_p = ease_out_cubic(raw_p)
+                alpha_p = char_p
+                ent_dy = int(round((1.0 - char_p) * 22.0))
+
+            char_alpha = max(0, min(255, int(round(alpha * alpha_p))))
+            # Subtle continuous 80 BPM wave float so settled text never freezes into a dead static image
+            idle_dy = int(round(2.4 * math.sin(t * 2.2 - c_idx * 0.24 + line_seed * 0.7)))
+            hi_pop_dy = 0
+            if is_hi:
+                # Emotional accent lift when the highlight keyword lights up + heartbeat pulse
+                hi_wave = math.sin(min(1.0, c_dt / 0.45) * math.pi)
+                hi_pop_dy = -int(round(5.0 * hi_wave + 2.2 * beat_pulse))
+            cy = y + ent_dy + idle_dy + hi_pop_dy
+        else:
+            char_alpha = alpha
+            cy = y
+
+        if char_alpha <= 2:
+            cur_x += cw + eff_spacing
+            continue
+
+        # Highlight warm amber aura glow
+        if is_hi:
+            glow_a = max(0, min(140, int(char_alpha * (0.16 + 0.14 * beat_pulse))))
+            for gx, gy in ((-3, 0), (3, 0), (0, -3), (0, 3), (-2, -2), (2, 2)):
+                draw.text((cur_x + gx, cy + gy), ch, font=font, fill=(*theme.accent_primary, glow_a))
+
+        shadow_alpha = max(0, min(240, int(char_alpha * min(0.92, theme.text_shadow_alpha + 0.25))))
+        for ox, oy in ((0, 2), (2, 3), (-1, 2), (0, -1)):
+            draw.text((cur_x + ox, cy + oy), ch, font=font, fill=(*theme.text_shadow, shadow_alpha))
+
+        color = (*theme.accent_primary, char_alpha) if is_hi else (*theme.text_primary, char_alpha)
+        draw.text(
+            (cur_x, cy),
+            ch,
+            font=font,
+            fill=color,
+            stroke_width=1 if is_hi else 0,
+            stroke_fill=(*theme.accent_primary, max(0, int(char_alpha * 0.45))) if is_hi else None,
+        )
+
+        if is_hi and hi_span_start is None:
+            hi_span_start = cur_x
+        if is_hi:
+            hi_span_last_idx = c_idx
+
+        is_last_hi = is_hi and (c_idx + 1 == len(visible_text) or not hi_mask[c_idx + 1])
+        if is_last_hi and hi_span_start is not None and show_underline:
+            if line_elapsed is not None:
+                span_ready_t = hi_span_last_idx * char_step_sec + char_fade_sec * 0.35
+                span_ul_prog = ease_out_cubic(max(0.0, min(1.0, (line_elapsed - span_ready_t) / 0.48)))
+            else:
+                span_ul_prog = underline_progress
+            if span_ul_prog > 0.01:
                 _draw_hand_underline(
                     draw,
                     hi_span_start,
                     cur_x + cw,
-                    underline_y,
-                    underline_progress,
+                    underline_y + (cy - y),
+                    span_ul_prog,
                     theme.accent_primary,
-                    alpha,
+                    char_alpha,
                     seed=line_seed * 13 + c_idx,
                 )
-                hi_span_start = None
-            elif not is_hi:
-                hi_span_start = None
-            cur_x += cw + letter_spacing
-        return
+            hi_span_start = None
+        elif not is_hi:
+            hi_span_start = None
 
-    spans: list[tuple[str, bool]] = []
-    for ch, is_hi in zip(visible_text, hi_mask[:visible_chars]):
-        if spans and spans[-1][1] == is_hi:
-            spans[-1] = (spans[-1][0] + ch, is_hi)
-        else:
-            spans.append((ch, is_hi))
-
-    cur_x = start_x
-    for span_idx, (segment, is_hi) in enumerate(spans):
-        seg_box = draw.textbbox((0, 0), segment, font=font)
-        seg_w = seg_box[2] - seg_box[0]
-        color = (*theme.accent_primary, alpha) if is_hi else (*theme.text_primary, alpha)
-        shadow_alpha = int(alpha * theme.text_shadow_alpha)
-        draw.text((cur_x + 2, y + 3), segment, font=font, fill=(*theme.text_shadow, shadow_alpha))
-        draw.text((cur_x, y), segment, font=font, fill=color)
-
-        if is_hi and show_underline and underline_progress > 0.01:
-            _draw_hand_underline(
-                draw,
-                cur_x,
-                cur_x + seg_w,
-                underline_y,
-                underline_progress,
-                theme.accent_primary,
-                alpha,
-                seed=line_seed * 13 + span_idx,
-            )
-        cur_x += seg_w
+        cur_x += cw + eff_spacing
 
 
 def draw_mood_doodles(
@@ -1127,18 +1214,14 @@ def _sticker_dy(motion: str, local_t: float, local_beat: float, beat_sec: float,
     return 0.0
 
 
-def _render_scene_layer(
+def _render_visual_stage(
     sc: dict[str, Any],
     t: float,
     beat_sec: float,
-    total_duration: float,
     assets: RenderAssets,
     theme: ThemePalette,
-    font_path: str | None,
-    base_font_size: int,
-    font_tag: ImageFont.FreeTypeFont | ImageFont.ImageFont,
-    header_tag: str,
 ) -> Image.Image:
+    """Render ONLY the visual stage layer (background, camera motion, 2.5D parallax, FX, doodles, vignette, scrim)."""
     local_t = max(0.0, t - sc["start_t"])
     scene_dur = max(0.01, sc["end_t"] - sc["start_t"])
     scene_prog = min(1.0, local_t / scene_dur)
@@ -1313,15 +1396,45 @@ def _render_scene_layer(
             crop_y = max(0, min(zh - HEIGHT, (zh - HEIGHT) // 2 + int(round(cam_dy))))
             stage = zoomed.crop((crop_x, crop_y, crop_x + WIDTH, crop_y + HEIGHT))
 
-    # Typography & HUD overlay
+    return stage
+
+
+def _render_typography_layer(
+    sc: dict[str, Any],
+    t: float,
+    beat_sec: float,
+    total_duration: float,
+    theme: ThemePalette,
+    font_path: str | None,
+    base_font_size: int,
+    font_tag: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    header_tag: str,
+    trans_offset: float = 0.0,
+) -> Image.Image:
+    """Render kinetic typography and optional HUD onto a decoupled RGBA layer (never smeared by visual transitions)."""
+    local_t = max(0.0, t - sc["start_t"])
+    scene_dur = max(0.01, sc["end_t"] - sc["start_t"])
+    remain_t = max(0.0, sc["end_t"] - t)
+    beat_phase = (t / beat_sec) % 1.0
+    beat_pulse = math.exp(-7.0 * beat_phase)
+    is_full_frame = len(sc.get("scene_frames", [])) > 0
+
     text_layer = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
     tdraw = ImageDraw.Draw(text_layer)
     text_theme_name = sc.get("text_theme", theme.name)
     text_theme = THEMES.get(text_theme_name, theme)
     is_cinema_emo = bool(sc.get("_cinema_emo", True))
-    hud_mode = str(sc.get("hud", "none" if is_cinema_emo else "full"))
-    show_underline = bool(sc.get("underline", not is_cinema_emo))
+    hud_mode = str(sc.get("hud", "minimal" if is_cinema_emo else "full"))
+    show_underline = bool(sc.get("underline", True))
     letter_spacing = int(sc.get("letter_spacing", 4 if is_cinema_emo else 0))
+
+    # Pre-transition exit fade so old subtitle cleanly exits before next shot's transition
+    exit_window = min(0.32, scene_dur * 0.14)
+    if not sc.get("_is_last_scene", False) and remain_t < exit_window:
+        exit_prog = ease_in_out_sine(max(0.0, min(1.0, remain_t / max(0.01, exit_window))))
+    else:
+        exit_prog = 1.0
+    exit_dy = -int(round((1.0 - exit_prog) * 12.0))
 
     if hud_mode == "full":
         if header_tag:
@@ -1340,105 +1453,109 @@ def _render_scene_layer(
             width=3,
         )
 
-    ts_label = sc.get("timestamp")
-    if ts_label and hud_mode in ("full", "minimal"):
-        ts_font = load_font(font_path, 22)
-        ts_box = tdraw.textbbox((0, 0), str(ts_label), font=ts_font)
-        ts_w = ts_box[2] - ts_box[0]
-        ts_y = 212 if hud_mode == "full" else 148
-        tdraw.text((WIDTH // 2 - ts_w // 2, ts_y), str(ts_label), font=ts_font, fill=(*text_theme.accent_primary, 155))
+    # Post-transition entrance clock: wait until visual transition passes trans_offset
+    text_t = local_t - trans_offset
+    if text_t >= 0.0 and exit_prog > 0.01:
+        text_beat = text_t / beat_sec
+        ts_label = sc.get("timestamp")
+        if ts_label and hud_mode in ("full", "minimal"):
+            ts_alpha = int(165 * min(1.0, text_t / 0.35) * exit_prog)
+            if ts_alpha > 4:
+                ts_font = load_font(font_path, 23)
+                ts_box = tdraw.textbbox((0, 0), str(ts_label), font=ts_font)
+                ts_w = ts_box[2] - ts_box[0]
+                ts_y = 212 if hud_mode == "full" else 235
+                tdraw.text((WIDTH // 2 - ts_w // 2, ts_y + exit_dy), str(ts_label), font=ts_font, fill=(*text_theme.accent_primary, ts_alpha))
 
-    lines: list[str] = sc.get("lines", [])
-    highlights: list[str] = sc.get("highlight", [])
-    text_anim = sc.get("text_anim", "fade_up" if is_cinema_emo else "beat_lines")
-    line_spacing = 104 if is_cinema_emo else 108
-    text_pos = sc.get("text_pos", "top")
-    if text_pos == "bottom":
-        anchor_y = 1520
-    elif text_pos == "center":
-        anchor_y = 940
-    else:
-        anchor_y = 390 if is_cinema_emo else (430 if is_full_frame else 490)
-    base_text_y = anchor_y - (len(lines) * line_spacing) // 2
+        lines: list[str] = sc.get("lines", [])
+        highlights: list[str] = sc.get("highlight", [])
+        text_anim = sc.get("text_anim", "beat_lines")
+        line_spacing = 104 if is_cinema_emo else 108
+        text_pos = sc.get("text_pos", "top")
+        if text_pos == "bottom":
+            anchor_y = 1520
+        elif text_pos == "center":
+            anchor_y = 940
+        else:
+            anchor_y = 395 if is_cinema_emo else (430 if is_full_frame else 490)
+        base_text_y = anchor_y - (len(lines) * line_spacing) // 2 + exit_dy
 
-    if text_anim == "typewriter_beat":
-        total_chars = max(1, sum(len(s) for s in lines))
-        reveal_beats = max(1.5, sc["beats"] * 0.62)
-        char_budget = int(math.ceil(min(1.0, local_beat / reveal_beats) * total_chars))
-        consumed = 0
-        for idx_l, line_str in enumerate(lines):
-            vis = max(0, min(len(line_str), char_budget - consumed))
-            consumed += len(line_str)
-            if vis <= 0:
-                continue
-            line_done_beat = reveal_beats * (consumed / total_chars)
-            ul_prog = ease_out_cubic(min(1.0, max(0.0, (local_beat - line_done_beat) / 0.55)))
-            draw_highlighted_line(
-                tdraw,
-                line_str,
-                vis,
-                highlights,
-                font_path,
-                base_font_size,
-                WIDTH // 2,
-                base_text_y + idx_l * line_spacing,
-                255,
-                ul_prog,
-                text_theme,
-                line_seed=idx_l + 1,
-                show_underline=show_underline,
-                letter_spacing=letter_spacing,
-            )
-    else:
-        for idx_l, line_str in enumerate(lines):
-            if text_anim == "beat_lines":
-                slot = max(1.0, round((sc["beats"] * 0.72) / max(1, len(lines)) * 2.0) / 2.0)
-                appear_beat = idx_l * slot
-                if local_beat < appear_beat:
+        eff_beats = max(1.5, (scene_dur - trans_offset) / beat_sec)
+        if text_anim == "typewriter_beat":
+            total_chars = max(1, sum(len(s) for s in lines))
+            reveal_sec = max(0.85, min((scene_dur - trans_offset) * 0.56, total_chars * 0.095))
+            char_step = reveal_sec / max(1, total_chars)
+            consumed = 0
+            for idx_l, line_str in enumerate(lines):
+                line_start_t = consumed * char_step
+                consumed += len(line_str)
+                if text_t < line_start_t:
                     continue
-                lt = (local_beat - appear_beat) * beat_sec
-                p = ease_out_cubic(min(1.0, lt / (0.42 if is_cinema_emo else 0.28)))
-                alpha = int(255 * p)
-                y_off = int((1.0 - p) * (18 if is_cinema_emo else 26))
-                ul_prog = ease_out_cubic(min(1.0, max(0.0, (local_beat - appear_beat - 0.35) / 0.65)))
-            elif text_anim == "word_pop":
-                appear_beat = idx_l * 1.0
-                if local_beat < appear_beat:
+                draw_highlighted_line(
+                    tdraw,
+                    line_str,
+                    len(line_str),
+                    highlights,
+                    font_path,
+                    base_font_size,
+                    WIDTH // 2,
+                    base_text_y + idx_l * line_spacing,
+                    int(255 * exit_prog),
+                    1.0,
+                    text_theme,
+                    line_seed=idx_l + 1,
+                    show_underline=show_underline,
+                    letter_spacing=letter_spacing,
+                    line_elapsed=text_t - line_start_t,
+                    char_step_sec=char_step,
+                    char_fade_sec=0.24,
+                    anim_style="typewriter_beat",
+                    t=t,
+                    beat_pulse=beat_pulse,
+                )
+        else:
+            for idx_l, line_str in enumerate(lines):
+                if text_anim in ("beat_lines", "fade_up"):
+                    slot_beats = max(0.85, round((eff_beats * 0.62) / max(1, len(lines)) * 2.0) / 2.0) if len(lines) > 1 else 0.0
+                    appear_t = idx_l * slot_beats * beat_sec
+                    c_step = 0.044
+                    c_fade = 0.34
+                elif text_anim == "word_pop":
+                    appear_t = idx_l * 0.85 * beat_sec
+                    c_step = 0.036
+                    c_fade = 0.30
+                else:  # slam_center
+                    appear_t = idx_l * 0.70 * beat_sec
+                    c_step = 0.030
+                    c_fade = 0.28
+
+                if text_t < appear_t:
                     continue
-                lt = (local_beat - appear_beat) * beat_sec
-                p = ease_out_back(min(1.0, lt / 0.32))
-                alpha = int(255 * min(1.0, lt / 0.16))
-                y_off = int((1.0 - p) * 20)
-                ul_prog = ease_out_cubic(min(1.0, max(0.0, (local_beat - appear_beat - 0.3) / 0.6)))
-            elif text_anim == "slam_center":
-                p = ease_out_cubic(min(1.0, local_t / (0.36 if is_cinema_emo else 0.22)))
-                alpha = int(255 * p)
-                y_off = int((1.0 - p) * 14)
-                ul_prog = ease_out_cubic(min(1.0, max(0.0, (local_beat - 0.6) / 0.75)))
-            else:  # fade_up
-                p = ease_out_cubic(min(1.0, local_t / 0.52))
-                alpha = int(255 * p)
-                y_off = int((1.0 - p) * 18)
-                ul_prog = ease_out_cubic(min(1.0, max(0.0, (local_beat - 0.55) / 0.75)))
 
-            draw_highlighted_line(
-                tdraw,
-                line_str,
-                len(line_str),
-                highlights,
-                font_path,
-                base_font_size,
-                WIDTH // 2,
-                base_text_y + idx_l * line_spacing + y_off,
-                alpha,
-                ul_prog,
-                text_theme,
-                line_seed=idx_l + 1,
-                show_underline=show_underline,
-                letter_spacing=letter_spacing,
-            )
+                draw_highlighted_line(
+                    tdraw,
+                    line_str,
+                    len(line_str),
+                    highlights,
+                    font_path,
+                    base_font_size,
+                    WIDTH // 2,
+                    base_text_y + idx_l * line_spacing,
+                    int(255 * exit_prog),
+                    1.0,
+                    text_theme,
+                    line_seed=idx_l + 1,
+                    show_underline=show_underline,
+                    letter_spacing=letter_spacing,
+                    line_elapsed=text_t - appear_t,
+                    char_step_sec=c_step,
+                    char_fade_sec=c_fade,
+                    anim_style=text_anim,
+                    t=t,
+                    beat_pulse=beat_pulse,
+                )
 
-    if hud_mode == "full":
+    if hud_mode in ("full", "minimal"):
         cur_measure_beat = int(t / beat_sec) % 4
         dot_gap = 28
         dots_start_x = WIDTH // 2 - (3 * dot_gap) // 2
@@ -1447,9 +1564,39 @@ def _render_scene_layer(
             cy = 1765
             is_cur = (bi == cur_measure_beat)
             r = 5 if is_cur else 3
-            col = (*text_theme.accent_primary, int(190 + 60 * beat_pulse)) if is_cur else (*text_theme.muted_ui, 90)
+            active_a = int((155 if hud_mode == "minimal" else 190) + 55 * beat_pulse)
+            idle_a = 55 if hud_mode == "minimal" else 90
+            col = (*text_theme.accent_primary, active_a) if is_cur else (*text_theme.muted_ui, idle_a)
             tdraw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=col)
 
+    return text_layer
+
+
+def _render_scene_layer(
+    sc: dict[str, Any],
+    t: float,
+    beat_sec: float,
+    total_duration: float,
+    assets: RenderAssets,
+    theme: ThemePalette,
+    font_path: str | None,
+    base_font_size: int,
+    font_tag: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    header_tag: str,
+) -> Image.Image:
+    stage = _render_visual_stage(sc, t, beat_sec, assets, theme)
+    text_layer = _render_typography_layer(
+        sc,
+        t,
+        beat_sec,
+        total_duration,
+        theme,
+        font_path,
+        base_font_size,
+        font_tag,
+        header_tag,
+        trans_offset=0.0,
+    )
     return Image.alpha_composite(stage, text_layer)
 
 
@@ -1533,8 +1680,8 @@ def compile_timeline(
     default_max_chars = max(4, int(data.get("max_chars_per_line", 14)))
     is_cinema_emo = str(data.get("style", "cinema_emo")) == "cinema_emo"
     default_grade = str(data.get("color_grade", "midnight_emo" if is_cinema_emo else "none"))
-    default_hud = str(data.get("hud", "none" if is_cinema_emo else "full"))
-    default_underline = bool(data.get("underline", not is_cinema_emo))
+    default_hud = str(data.get("hud", "minimal" if is_cinema_emo else "full"))
+    default_underline = bool(data.get("underline", True))
     default_spacing = int(data.get("letter_spacing", 4 if is_cinema_emo else 0))
 
     for idx_s, sc in enumerate(scenes, 1):
@@ -1547,7 +1694,7 @@ def compile_timeline(
         if not (math.isfinite(beats) and 0.25 <= beats <= 120.0):
             raise ValueError(f"Scene {idx_s} 'beats' must be in [0.25, 120], got: {beats}")
 
-        # Validate optional coordinate pairs upfront
+        # Validate optional coordinate pairs and crop_box upfront
         for pos_field, pos_def in (
             ("light_pos", (0.5, 0.5)),
             ("steam_pos", (0.52, 0.62)),
@@ -1556,6 +1703,8 @@ def compile_timeline(
         ):
             if sc.get(pos_field) is not None:
                 _parse_pos_pair(sc.get(pos_field), pos_def, f"scenes[{idx_s}].{pos_field}")
+
+        crop_box = _parse_crop_box(sc.get("crop_box"), f"scenes[{idx_s}].crop_box")
 
         # Validate positive timing floats
         for num_field, min_val in (
@@ -1573,13 +1722,13 @@ def compile_timeline(
         end_t = (cur_beat + beats) * beat_sec
         cur_beat += beats
 
-        raw_scene_list = sc.get("scene_frames") if sc.get("scene_frames") is not None else (
+        raw_scene_list = list(sc.get("scene_frames")) if sc.get("scene_frames") is not None else (
             [sc["scene_image"]] if sc.get("scene_image") else []
         )
-        raw_fg_list = sc.get("fg_frames") if sc.get("fg_frames") is not None else (
+        raw_fg_list = list(sc.get("fg_frames")) if sc.get("fg_frames") is not None else (
             [sc["fg_image"]] if sc.get("fg_image") else []
         )
-        raw_sticker_list = sc.get("frames") if sc.get("frames") is not None else (
+        raw_sticker_list = list(sc.get("frames")) if sc.get("frames") is not None else (
             [sc["sticker"]] if sc.get("sticker") else []
         )
 
@@ -1590,6 +1739,16 @@ def compile_timeline(
                 f"Scene {idx_s} must specify at least one visual asset ('scene_image', 'scene_frames', 'sticker', or 'frames')"
             )
 
+        # Auto-guard against stale blink frame when user replaces primary keyframe with external Banana 2.5 image
+        if sc.get("frame_mode") == "natural_blink" and len(raw_scene_list) >= 2:
+            p0 = resolve_asset_path(str(raw_scene_list[0]), base_dir, skill_dir)
+            try:
+                p1 = resolve_asset_path(str(raw_scene_list[1]), base_dir, skill_dir)
+                if p0.stat().st_mtime > p1.stat().st_mtime + 2.0:
+                    raw_scene_list = [raw_scene_list[0]]
+            except FileNotFoundError:
+                raw_scene_list = [raw_scene_list[0]]
+
         scene_frames: list[Image.Image] = []
         fg_frames: list[Image.Image] = []
         sticker_frames: list[Image.Image] = []
@@ -1598,9 +1757,17 @@ def compile_timeline(
         for raw_sc in raw_scene_list:
             resolved_scene = resolve_asset_path(str(raw_sc), base_dir, skill_dir)
             if load_images:
-                s_key = f"{resolved_scene.resolve()}::{shot_grade}"
+                s_key = f"{resolved_scene.resolve()}::{shot_grade}::{crop_box}"
                 if s_key not in scene_cache:
                     raw_img = _safe_open_rgba(resolved_scene)
+                    if crop_box is not None:
+                        cw, ch = raw_img.size
+                        raw_img = raw_img.crop((
+                            int(cw * crop_box[0]),
+                            int(ch * crop_box[1]),
+                            int(cw * crop_box[2]),
+                            int(ch * crop_box[3]),
+                        ))
                     resized_img = _cover_resize(raw_img, oversample_w, oversample_h)
                     if shot_grade == "midnight_emo":
                         resized_img = _apply_cinema_emo_grade(resized_img)
@@ -1624,6 +1791,13 @@ def compile_timeline(
                         sticker_cache[key] = load_and_trim_sticker(resolved)
                     sticker_frames.append(sticker_cache[key])
 
+        resolved_light_pos = sc.get("light_pos")
+        if resolved_light_pos == "auto" and load_images and scene_frames:
+            resolved_light_pos = list(_detect_warm_light_anchor(scene_frames[0]))
+        resolved_prop_pos = sc.get("prop_pos")
+        if resolved_prop_pos == "auto" and load_images and scene_frames:
+            resolved_prop_pos = list(_detect_warm_light_anchor(scene_frames[0]))
+
         raw_lines = sc.get("lines", [])
         if not isinstance(raw_lines, list):
             raise ValueError(f"Scene {idx_s} 'lines' must be a list of strings")
@@ -1635,11 +1809,15 @@ def compile_timeline(
         max_line_chars = max(4, int(sc.get("max_chars_per_line", default_max_chars)))
         wrapped_lines = _wrap_cjk_lines([str(x) for x in raw_lines], max_chars=max_line_chars, highlights=highlights)
 
-        vis_src = str((raw_scene_list or raw_sticker_list)[0])
+        primary_src = str((raw_scene_list or raw_sticker_list)[0])
+        vis_src = f"{primary_src}#{crop_box}" if crop_box else primary_src
         compiled_scenes.append({
             **sc,
+            "light_pos": resolved_light_pos,
+            "prop_pos": resolved_prop_pos,
             "_vis_src": vis_src,
             "_cinema_emo": is_cinema_emo,
+            "_is_last_scene": (idx_s == len(scenes)),
             "hud": sc.get("hud", default_hud),
             "underline": sc.get("underline", default_underline),
             "letter_spacing": sc.get("letter_spacing", default_spacing),
@@ -1798,37 +1976,37 @@ def render_video(
                         scene_idx += 1
 
                     sc = compiled_scenes[scene_idx]
-                    frame = _render_scene_layer(
+                    visual_frame = _render_visual_stage(sc, t, beat_sec, assets, theme)
+
+                    transition = sc.get("transition", "crossfade")
+                    has_trans = (scene_idx > 0 and trans_duration > 0.005 and transition != "cut")
+                    if has_trans:
+                        local_t = t - sc["start_t"]
+                        if local_t < trans_duration:
+                            prev_sc = compiled_scenes[scene_idx - 1]
+                            prev_visual = _render_visual_stage(prev_sc, t, beat_sec, assets, theme)
+                            visual_frame = _apply_transition(
+                                prev_visual,
+                                visual_frame,
+                                transition,
+                                local_t / trans_duration,
+                                theme,
+                            )
+
+                    eff_trans_offset = (trans_duration * 0.56) if has_trans else 0.0
+                    text_layer = _render_typography_layer(
                         sc,
                         t,
                         beat_sec,
                         total_duration,
-                        assets,
                         theme,
                         resolved_font,
                         base_font_size,
                         font_tag,
                         header_tag,
+                        trans_offset=eff_trans_offset,
                     )
-
-                    if scene_idx > 0 and trans_duration > 0.005:
-                        transition = sc.get("transition", "crossfade")
-                        local_t = t - sc["start_t"]
-                        if transition != "cut" and local_t < trans_duration:
-                            prev_sc = compiled_scenes[scene_idx - 1]
-                            prev_frame = _render_scene_layer(
-                                prev_sc,
-                                t,
-                                beat_sec,
-                                total_duration,
-                                assets,
-                                theme,
-                                resolved_font,
-                                base_font_size,
-                                font_tag,
-                                header_tag,
-                            )
-                            frame = _apply_transition(prev_frame, frame, transition, local_t / trans_duration, theme)
+                    frame = Image.alpha_composite(visual_frame, text_layer)
 
                     proc.stdin.write(frame.convert("RGB").tobytes())
             except BrokenPipeError:

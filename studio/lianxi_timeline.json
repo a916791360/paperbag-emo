@@ -1,6 +1,9 @@
 {
   "bpm": 80,
   "theme": "late_night",
+  "style": "cinema_emo",
+  "hud": "minimal",
+  "underline": true,
   "tag": "深夜纸袋人 · 情绪电影",
   "transition_sec": 0.56,
   "scenes": [
@@ -18,7 +21,7 @@
       ],
       "highlight": ["一句话"],
       "camera": "push_in",
-      "prop_pos": [0.41, 0.70],
+      "prop_pos": "auto",
       "prop_color": "amber",
       "cat_pos": [0.74, 0.73],
       "fx": ["prop_pulse", "cat_zzz", "film_grain"],
@@ -56,7 +59,7 @@
       "highlight": ["最高境界", "心疼"],
       "camera": "push_in",
       "transition": "crossfade",
-      "light_pos": [0.15, 0.52],
+      "light_pos": "auto",
       "cat_pos": [0.82, 0.77],
       "fx": ["purr_waves", "film_grain"],
       "text_anim": "beat_lines",
@@ -80,7 +83,8 @@
     {
       "beats": 4,
       "timestamp": "23:46",
-      "scene_image": "studio/scenes/lianxi/s5_boundary_cu.jpg",
+      "scene_image": "studio/scenes/lianxi/s4_street_wide.jpg",
+      "crop_box": [0.06, 0.22, 0.94, 0.92],
       "lines": [
         "你就想划清界限。"
       ],
@@ -102,7 +106,7 @@
       "highlight": ["很喜欢她", "一点狼狈"],
       "camera": "push_in",
       "transition": "luma_fade",
-      "light_pos": [0.85, 0.40],
+      "light_pos": "auto",
       "fx": ["lamp_flicker", "rain_glass", "bokeh_depth", "film_grain"],
       "text_anim": "beat_lines",
       "text_pos": "top"
@@ -110,7 +114,8 @@
     {
       "beats": 4,
       "timestamp": "00:09",
-      "scene_image": "studio/scenes/lianxi/s7_heartbreak_ecu.jpg",
+      "scene_image": "studio/scenes/lianxi/s6_rain_halt.jpg",
+      "crop_box": [0.14, 0.18, 0.86, 0.78],
       "lines": [
         "心都会碎，"
       ],
@@ -124,7 +129,8 @@
     {
       "beats": 4,
       "timestamp": "00:10",
-      "scene_image": "studio/scenes/lianxi/s8_tilt_action.jpg",
+      "scene_image": "studio/scenes/lianxi/s9_shelter_finale.jpg",
+      "crop_box": [0.16, 0.20, 0.92, 0.82],
       "lines": [
         "甚至脑子都来不及思考，"
       ],
@@ -146,7 +152,7 @@
       "highlight": ["开始疼了"],
       "camera": "pull_out",
       "transition": "warm_dissolve",
-      "light_pos": [0.29, 0.36],
+      "light_pos": "auto",
       "steam_pos": [0.73, 0.62],
       "cat_pos": [0.64, 0.80],
       "fx": ["coffee_steam", "purr_waves", "bokeh_depth", "film_grain"],

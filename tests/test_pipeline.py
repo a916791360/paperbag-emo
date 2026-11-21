@@ -106,6 +106,50 @@ class TestCompileAndValidateTimeline(unittest.TestCase):
         self.assertIn("[PACE HINT]", tags)
         self.assertIn("[DIVERSITY HINT]", tags)
 
+    def test_crop_box_validation_and_warm_light_auto_anchor(self) -> None:
+        self.assertEqual(rev._parse_crop_box([0.1, 0.2, 0.9, 0.8]), (0.1, 0.2, 0.9, 0.8))
+        with self.assertRaises(ValueError):
+            rev._parse_crop_box([0.8, 0.2, 0.4, 0.8])
+        img = Image.new("RGB", (128, 128), (16, 24, 32))
+        px = img.load()
+        for y in range(75, 95):
+            for x in range(25, 45):
+                px[x, y] = (248, 192, 96)
+        ax, ay = rev._detect_warm_light_anchor(img)
+        self.assertTrue(0.18 <= ax <= 0.38, f"Expected warm anchor x around 0.27, got {ax}")
+        self.assertTrue(0.55 <= ay <= 0.78, f"Expected warm anchor y around 0.66, got {ay}")
+
+    def test_decoupled_typography_waits_for_transition_offset(self) -> None:
+        sc = {
+            "start_t": 3.0,
+            "end_t": 6.0,
+            "beats": 4.0,
+            "lines": ["心都会碎，"],
+            "highlight": ["心都会碎"],
+            "text_anim": "slam_center",
+            "hud": "none",
+            "underline": True,
+            "letter_spacing": 4,
+            "_cinema_emo": True,
+            "_is_last_scene": False,
+            "scene_frames": [],
+        }
+        theme = rev.THEMES["late_night"]
+        font_path = rev.resolve_font_path(prefer_serif=True)
+        font_tag = rev.load_font(font_path, 28)
+        # During transition (t=3.15 < 3.0 + 0.32), subtitle must wait and not be swallowed
+        early_layer = rev._render_typography_layer(
+            sc, t=3.15, beat_sec=0.75, total_duration=9.0, theme=theme,
+            font_path=font_path, base_font_size=52, font_tag=font_tag, header_tag="", trans_offset=0.32,
+        )
+        self.assertIsNone(early_layer.getbbox())
+        # After transition offset + cascade (t=3.85), subtitle and underline must be visible
+        active_layer = rev._render_typography_layer(
+            sc, t=3.85, beat_sec=0.75, total_duration=9.0, theme=theme,
+            font_path=font_path, base_font_size=52, font_tag=font_tag, header_tag="", trans_offset=0.32,
+        )
+        self.assertIsNotNone(active_layer.getbbox())
+
 
 class TestCutoutPipeline(unittest.TestCase):
     def test_preserves_kraft_and_charcoal_opacity_and_removes_green_screen(self) -> None:
