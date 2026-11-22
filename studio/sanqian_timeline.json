@@ -1,0 +1,120 @@
+{
+  "bpm": 74,
+  "theme": "late_night",
+  "style": "cinema_emo",
+  "hud": "none",
+  "underline": true,
+  "tag": "深夜纸袋人 · 三千梨树六百湘水",
+  "transition_sec": 0.54,
+  "scenes": [
+    {
+      "beats": 4.5,
+      "scene_frames": [
+        "studio/scenes/sanqian/s1_long_life_train.jpg",
+        "studio/scenes/sanqian/s1_long_life_train_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 2.0,
+      "lines": [
+        "只是这冗长的一生"
+      ],
+      "highlight": ["冗长的一生"],
+      "camera": "push_in",
+      "light_pos": "auto",
+      "cat_pos": [0.72, 0.75],
+      "fx": ["cat_zzz", "film_grain"],
+      "text_anim": "typewriter_beat",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4.5,
+      "scene_frames": [
+        "studio/scenes/sanqian/s2_choke_up_throat.jpg",
+        "studio/scenes/sanqian/s2_choke_up_throat_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 2.0,
+      "lines": [
+        "想到再难与你逢见"
+      ],
+      "highlight": ["再难与你逢见"],
+      "camera": "push_in",
+      "transition": "crossfade",
+      "light_pos": "auto",
+      "fx": ["film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 3.5,
+      "scene_frames": [
+        "studio/scenes/sanqian/s2_choke_up_throat.jpg",
+        "studio/scenes/sanqian/s2_choke_up_throat_blink.jpg"
+      ],
+      "crop_box": [0.12, 0.14, 0.90, 0.88],
+      "frame_mode": "natural_blink",
+      "blink_interval": 1.8,
+      "lines": [
+        "难免哽咽"
+      ],
+      "highlight": ["难免哽咽"],
+      "camera": "breathe",
+      "transition": "crossfade",
+      "cat_pos": [0.78, 0.78],
+      "fx": ["purr_waves", "film_grain"],
+      "text_anim": "slam_center",
+      "text_pos": "top"
+    },
+    {
+      "beats": 5.5,
+      "scene_image": "studio/scenes/sanqian/s3_pear_blossom_water.jpg",
+      "lines": [
+        "以后隔着三千梨树",
+        "六百湘水"
+      ],
+      "highlight": ["三千梨树", "六百湘水"],
+      "camera": "drift_diag",
+      "transition": "luma_fade",
+      "light_pos": "auto",
+      "fx": ["bokeh_depth", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4,
+      "scene_frames": [
+        "studio/scenes/sanqian/s4_petal_in_palm.jpg",
+        "studio/scenes/sanqian/s4_petal_in_palm_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 1.9,
+      "lines": [
+        "你不必哽咽"
+      ],
+      "highlight": ["不必哽咽"],
+      "camera": "push_in",
+      "transition": "crossfade",
+      "prop_pos": "auto",
+      "prop_color": "amber",
+      "fx": ["prop_pulse", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 5.5,
+      "scene_image": "studio/scenes/sanqian/s5_first_meeting_glow.jpg",
+      "lines": [
+        "我始终记得",
+        "见你的第一面"
+      ],
+      "highlight": ["见你的第一面"],
+      "camera": "pull_out",
+      "transition": "warm_dissolve",
+      "light_pos": "auto",
+      "cat_pos": [0.49, 0.82],
+      "fx": ["lamp_flicker", "purr_waves", "bokeh_depth", "film_grain"],
+      "text_anim": "typewriter_beat",
+      "text_pos": "top"
+    }
+  ]
+}
