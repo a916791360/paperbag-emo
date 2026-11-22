@@ -1,0 +1,112 @@
+{
+  "bpm": 78,
+  "theme": "late_night",
+  "style": "cinema_emo",
+  "hud": "none",
+  "underline": true,
+  "tag": "深夜纸袋人 · 最大的诚意",
+  "transition_sec": 0.52,
+  "scenes": [
+    {
+      "beats": 4,
+      "scene_frames": [
+        "studio/scenes/chengyi/s1_calm_night_railing.jpg",
+        "studio/scenes/chengyi/s1_calm_night_railing_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 2.0,
+      "lines": [
+        "我没有不甘心，"
+      ],
+      "highlight": ["没有不甘心"],
+      "camera": "push_in",
+      "cat_pos": [0.72, 0.76],
+      "fx": ["cat_zzz", "film_grain"],
+      "text_anim": "typewriter_beat",
+      "text_pos": "top"
+    },
+    {
+      "beats": 5.5,
+      "scene_image": "studio/scenes/chengyi/s2_drenched_letter_cutaway.jpg",
+      "lines": [
+        "只是这结局，配不上当初",
+        "明知不可为而为之的我，"
+      ],
+      "highlight": ["配不上", "明知不可为而为之"],
+      "camera": "drift_diag",
+      "transition": "luma_fade",
+      "light_pos": "auto",
+      "fx": ["rain_glass", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4,
+      "scene_frames": [
+        "studio/scenes/chengyi/s3_full_sincerity_lantern.jpg",
+        "studio/scenes/chengyi/s3_full_sincerity_lantern_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 2.0,
+      "lines": [
+        "我拿出了最大的诚意，"
+      ],
+      "highlight": ["最大的诚意"],
+      "camera": "push_in",
+      "transition": "crossfade",
+      "light_pos": "auto",
+      "fx": ["bokeh_depth", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4,
+      "scene_frames": [
+        "studio/scenes/chengyi/s3_full_sincerity_lantern.jpg",
+        "studio/scenes/chengyi/s3_full_sincerity_lantern_blink.jpg"
+      ],
+      "crop_box": [0.12, 0.14, 0.88, 0.86],
+      "frame_mode": "natural_blink",
+      "blink_interval": 1.8,
+      "lines": [
+        "所以该遗憾的不是我。"
+      ],
+      "highlight": ["该遗憾的不是我"],
+      "camera": "breathe",
+      "transition": "crossfade",
+      "light_pos": "auto",
+      "fx": ["film_grain"],
+      "text_anim": "slam_center",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4,
+      "scene_image": "studio/scenes/chengyi/s4_leave_lantern_behind.jpg",
+      "lines": [
+        "我是你的上限，"
+      ],
+      "highlight": ["你的上限"],
+      "camera": "pan_left",
+      "transition": "luma_fade",
+      "light_pos": "auto",
+      "fx": ["rain_glass", "lamp_flicker", "film_grain"],
+      "text_anim": "slam_center",
+      "text_pos": "top"
+    },
+    {
+      "beats": 5.5,
+      "scene_image": "studio/scenes/chengyi/s5_walk_above_horizon.jpg",
+      "lines": [
+        "而你只是我的下限。"
+      ],
+      "highlight": ["我的下限"],
+      "camera": "pull_out",
+      "transition": "warm_dissolve",
+      "light_pos": "auto",
+      "cat_pos": [0.66, 0.72],
+      "fx": ["purr_waves", "bokeh_depth", "film_grain"],
+      "text_anim": "typewriter_beat",
+      "text_pos": "top"
+    }
+  ]
+}
