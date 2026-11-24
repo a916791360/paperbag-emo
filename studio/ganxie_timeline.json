@@ -1,0 +1,139 @@
+{
+  "bpm": 76,
+  "theme": "late_night",
+  "style": "cinema_emo",
+  "hud": "none",
+  "underline": true,
+  "tag": "深夜纸袋人 · 感谢那位特殊的人",
+  "transition_sec": 0.52,
+  "scenes": [
+    {
+      "beats": 3.5,
+      "scene_image": "studio/scenes/ganxie/s1_special_person_walk.jpg",
+      "lines": [
+        "最后我要感谢一位特殊的人，"
+      ],
+      "highlight": ["特殊的人"],
+      "camera": "push_in",
+      "light_pos": "auto",
+      "cat_pos": [0.58, 0.80],
+      "fx": ["bokeh_depth", "film_grain"],
+      "text_anim": "typewriter_beat",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4.0,
+      "scene_image": "studio/scenes/ganxie/s1_special_person_walk.jpg",
+      "crop_box": [0.12, 0.22, 0.86, 0.94],
+      "lines": [
+        "虽然他只匆匆陪我走了一段路，"
+      ],
+      "highlight": ["匆匆陪我走了一段路"],
+      "camera": "push_in",
+      "transition": "camera_morph",
+      "light_pos": "auto",
+      "fx": ["film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4.5,
+      "scene_frames": [
+        "studio/scenes/ganxie/s2_lost_and_gained_desk.jpg",
+        "studio/scenes/ganxie/s2_lost_and_gained_desk_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 2.0,
+      "lines": [
+        "但有失终会有得，",
+        "你也教会了我许多道理，"
+      ],
+      "highlight": ["有失终会有得", "许多道理"],
+      "camera": "drift_diag",
+      "transition": "luma_fade",
+      "light_pos": "auto",
+      "steam_pos": [0.64, 0.77],
+      "cat_pos": [0.88, 0.78],
+      "fx": ["coffee_steam", "cat_zzz", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4.5,
+      "scene_frames": [
+        "studio/scenes/ganxie/s3_mirror_shaped_me.jpg",
+        "studio/scenes/ganxie/s3_mirror_shaped_me_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 2.0,
+      "lines": [
+        "你的出现和缺席，",
+        "也塑造了今天的我。"
+      ],
+      "highlight": ["出现和缺席", "今天的我"],
+      "camera": "push_in",
+      "transition": "luma_fade",
+      "light_pos": "auto",
+      "fx": ["film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4.0,
+      "scene_image": "studio/scenes/ganxie/s4_morning_dew_cutaway.jpg",
+      "lines": [
+        "人的缘分，",
+        "朝生暮死如露水，"
+      ],
+      "highlight": ["朝生暮死", "如露水"],
+      "camera": "drift_diag",
+      "transition": "luma_fade",
+      "prop_pos": "auto",
+      "prop_color": "amber",
+      "fx": ["prop_pulse", "bokeh_depth", "film_grain"],
+      "text_anim": "typewriter_beat",
+      "text_pos": "top"
+    },
+    {
+      "beats": 3.5,
+      "scene_frames": [
+        "studio/scenes/ganxie/s5_wish_you_well_horizon.jpg",
+        "studio/scenes/ganxie/s5_wish_you_well_horizon_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 2.0,
+      "lines": [
+        "依旧祝你一切都好，"
+      ],
+      "highlight": ["一切都好"],
+      "camera": "pull_out",
+      "transition": "warm_dissolve",
+      "light_pos": "auto",
+      "cat_pos": [0.78, 0.73],
+      "fx": ["bokeh_depth", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4.5,
+      "scene_frames": [
+        "studio/scenes/ganxie/s5_wish_you_well_horizon.jpg",
+        "studio/scenes/ganxie/s5_wish_you_well_horizon_blink.jpg"
+      ],
+      "crop_box": [0.12, 0.18, 0.88, 0.92],
+      "frame_mode": "natural_blink",
+      "blink_interval": 1.9,
+      "lines": [
+        "即使我们不再相见。"
+      ],
+      "highlight": ["不再相见"],
+      "camera": "breathe",
+      "transition": "camera_morph",
+      "light_pos": "auto",
+      "cat_pos": [0.82, 0.74],
+      "fx": ["purr_waves", "bokeh_depth", "film_grain"],
+      "text_anim": "slam_center",
+      "text_pos": "top"
+    }
+  ]
+}

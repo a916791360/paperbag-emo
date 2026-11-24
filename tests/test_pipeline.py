@@ -150,6 +150,94 @@ class TestCompileAndValidateTimeline(unittest.TestCase):
         )
         self.assertIsNotNone(active_layer.getbbox())
 
+    def test_first_scene_frame0_renders_full_cover_subtitle(self) -> None:
+        sc = {
+            "start_t": 0.0,
+            "end_t": 3.0,
+            "beats": 4.0,
+            "lines": ["我没有不甘心，"],
+            "highlight": ["没有不甘心"],
+            "text_anim": "typewriter_beat",
+            "hud": "none",
+            "underline": True,
+            "letter_spacing": 4,
+            "_cinema_emo": True,
+            "_is_first_scene": True,
+            "_is_last_scene": False,
+            "scene_frames": [],
+        }
+        theme = rev.THEMES["late_night"]
+        font_path = rev.resolve_font_path(prefer_serif=True)
+        font_tag = rev.load_font(font_path, 28)
+        f0_layer = rev._render_typography_layer(
+            sc, t=0.0, beat_sec=0.75, total_duration=12.0, theme=theme,
+            font_path=font_path, base_font_size=60, font_tag=font_tag, header_tag="", trans_offset=0.0,
+        )
+        self.assertIsNotNone(f0_layer.getbbox(), "Frame 0 must contain opening cover subtitle")
+
+    def test_same_image_crop_box_auto_upgrades_crossfade_to_camera_morph(self) -> None:
+        data = {
+            "bpm": 78,
+            "style": "cinema_emo",
+            "scenes": [
+                {
+                    "beats": 4,
+                    "scene_image": "studio/scenes/chengyi/s3_full_sincerity_lantern.jpg",
+                    "lines": ["我拿出了最大的诚意，"],
+                    "transition": "crossfade",
+                },
+                {
+                    "beats": 4,
+                    "scene_image": "studio/scenes/chengyi/s3_full_sincerity_lantern.jpg",
+                    "crop_box": [0.12, 0.14, 0.88, 0.86],
+                    "lines": ["所以该遗憾的不是我。"],
+                    "transition": "crossfade",
+                },
+            ],
+        }
+        _bpm, _theme, _bg, compiled = rev.compile_timeline(data, self.base_dir, self.skill_dir, load_images=False)
+        self.assertEqual(compiled[0]["transition"], "crossfade")
+        self.assertEqual(
+            compiled[1]["transition"],
+            "camera_morph",
+            "Consecutive shots sharing the same base keyframe must use camera_morph instead of crossfade ghosting",
+        )
+
+    def test_scene_video_validation_and_same_video_camera_morph(self) -> None:
+        with tempfile.TemporaryDirectory(dir=str(self.base_dir)) as tmp:
+            dummy_vid = Path(tmp) / "clip.mp4"
+            dummy_vid.write_bytes(b"placeholder")
+            rel_vid = str(dummy_vid.relative_to(self.base_dir))
+            data = {
+                "bpm": 76,
+                "style": "cinema_emo",
+                "scenes": [
+                    {
+                        "beats": 4,
+                        "scene_video": rel_vid,
+                        "video_start": 0.0,
+                        "video_speed": 1.0,
+                        "video_loop": "pingpong",
+                        "lines": ["一种是你曾经那么用力地爱过，"],
+                    },
+                    {
+                        "beats": 4,
+                        "scene_video": rel_vid,
+                        "video_start": 3.2,
+                        "crop_box": [0.12, 0.16, 0.88, 0.86],
+                        "text_y": 320,
+                        "transition": "crossfade",
+                        "lines": ["最后却发现，那个人根本不值得。"],
+                    },
+                ],
+            }
+            _bpm, _theme, _bg, compiled = rev.compile_timeline(data, self.base_dir, self.skill_dir, load_images=False)
+            self.assertEqual(compiled[1]["transition"], "camera_morph")
+            self.assertEqual(compiled[1]["text_y"], 320)
+            with self.assertRaises(ValueError):
+                bad = {**data, "scenes": [{**data["scenes"][0], "video_loop": "invalid_mode"}]}
+                rev.compile_timeline(bad, self.base_dir, self.skill_dir, load_images=False)
+
 
 class TestCutoutPipeline(unittest.TestCase):
     def test_preserves_kraft_and_charcoal_opacity_and_removes_green_screen(self) -> None:

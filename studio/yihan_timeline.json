@@ -1,0 +1,99 @@
+{
+  "bpm": 76,
+  "theme": "late_night",
+  "style": "cinema_emo",
+  "hud": "none",
+  "underline": true,
+  "tag": "深夜纸袋人 · 爱情里的两种遗憾",
+  "transition_sec": 0.48,
+  "scenes": [
+    {
+      "beats": 3.5,
+      "scene_video": "studio/scenes/yihan/s1_two_regrets_crossroad.mp4",
+      "video_start": 0.0,
+      "video_speed": 1.0,
+      "video_loop": "clamp",
+      "lines": [
+        "爱情里面有两种遗憾，"
+      ],
+      "highlight": ["两种遗憾"],
+      "camera": "push_in",
+      "light_pos": "auto",
+      "fx": ["film_grain"],
+      "text_anim": "typewriter_beat",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4.5,
+      "scene_video": "studio/scenes/yihan/s2_loved_too_hard_rain.mp4",
+      "video_start": 0.0,
+      "video_speed": 1.0,
+      "video_loop": "clamp",
+      "lines": [
+        "一种是你曾经那么用力地爱过，"
+      ],
+      "highlight": ["用力地爱过"],
+      "camera": "breathe",
+      "transition": "luma_fade",
+      "light_pos": "auto",
+      "fx": ["film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4.0,
+      "scene_video": "studio/scenes/yihan/s2_loved_too_hard_rain.mp4",
+      "video_start": 3.55,
+      "video_speed": 1.0,
+      "video_loop": "clamp",
+      "crop_box": [0.12, 0.16, 0.88, 0.86],
+      "lines": [
+        "最后却发现，",
+        "那个人根本不值得。"
+      ],
+      "highlight": ["根本不值得"],
+      "camera": "push_in",
+      "transition": "camera_morph",
+      "light_pos": "auto",
+      "fx": ["film_grain"],
+      "text_anim": "slam_center",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4.5,
+      "scene_video": "studio/scenes/yihan/s3_neglected_cold_room.mp4",
+      "video_start": 1.0,
+      "video_speed": 1.0,
+      "video_loop": "clamp",
+      "lines": [
+        "另一种是你没有好好地去爱，"
+      ],
+      "highlight": ["没有好好地去爱"],
+      "camera": "breathe",
+      "transition": "luma_fade",
+      "light_pos": "auto",
+      "fx": ["film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 5.0,
+      "scene_video": "studio/scenes/yihan/s4_lost_empty_chair.mp4",
+      "video_start": 1.2,
+      "video_speed": 1.0,
+      "video_loop": "clamp",
+      "lines": [
+        "失去了才发现，",
+        "那是一个真正值得的人。"
+      ],
+      "highlight": ["失去了才发现", "真正值得的人"],
+      "camera": "pull_out",
+      "transition": "warm_dissolve",
+      "light_pos": "auto",
+      "fx": ["film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top",
+      "text_y": 285
+    }
+  ]
+}

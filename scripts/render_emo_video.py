@@ -232,22 +232,22 @@ def check_environment(explicit_font: str | None = None, prefer_serif: bool = Fal
 
 @functools.lru_cache(maxsize=2)
 def _build_midnight_emo_lut() -> list[int]:
-    """Build 768-entry RGB S-curve LUT deepening midnight-teal shadows and warming amber highlights."""
+    """Build 768-entry RGB LUT lifting dark-slate midtones for mobile clarity while warming amber highlights."""
     lut_r: list[int] = []
     lut_g: list[int] = []
     lut_b: list[int] = []
     for i in range(256):
         x = i / 255.0
-        # Deeper shadow contrast S-curve (crushes flat mid-lows into rich midnight shadow)
-        if x < 0.52:
-            c = 0.52 * ((x / 0.52) ** 1.24)
+        # Gentle filmic shadow toe-lift + midtone opening so dark scenes remain clear on mobile screens
+        if x < 0.55:
+            c = 0.025 + 0.525 * ((x / 0.55) ** 0.86)
         else:
-            c = 0.52 + 0.48 * (1.0 - ((1.0 - x) / 0.48) ** 1.12)
+            c = 0.55 + 0.45 * (1.0 - ((1.0 - x) / 0.45) ** 1.16)
         shadow_w = (1.0 - c) * c * 4.0  # peaks in lower midtones
-        hi_w = (c ** 1.6)
-        r = int(round((c * 255.0) - 7.0 * shadow_w + 8.0 * hi_w))
-        g = int(round((c * 255.0) + 1.0 * shadow_w + 2.0 * hi_w))
-        b = int(round((c * 255.0) + 8.0 * shadow_w - 7.0 * hi_w))
+        hi_w = (c ** 1.45)
+        r = int(round((c * 255.0) - 5.0 * shadow_w + 12.0 * hi_w))
+        g = int(round((c * 255.0) + 2.5 * shadow_w + 4.5 * hi_w))
+        b = int(round((c * 255.0) + 9.0 * shadow_w - 6.0 * hi_w))
         lut_r.append(max(0, min(255, r)))
         lut_g.append(max(0, min(255, g)))
         lut_b.append(max(0, min(255, b)))
@@ -262,12 +262,12 @@ def _apply_cinema_emo_grade(img: Image.Image) -> Image.Image:
     sw, sh = max(16, w // 4), max(16, h // 4)
     small = rgb.resize((sw, sh), Image.Resampling.BILINEAR)
     r_ch, g_ch, b_ch = small.split()
-    # Keep bright warm pixels (>150) and tint toward warm amber-gold glow
-    r_hi = r_ch.point(lambda p: max(0, min(255, int((p - 145) * 1.45))) if p > 145 else 0)
-    g_hi = g_ch.point(lambda p: max(0, min(255, int((p - 150) * 1.05))) if p > 150 else 0)
-    b_hi = b_ch.point(lambda p: max(0, min(255, int((p - 165) * 0.55))) if p > 165 else 0)
-    a_hi = r_hi.point(lambda p: min(92, int(p * 0.42)))
-    bloom_small = Image.merge("RGBA", (r_hi, g_hi, b_hi, a_hi)).filter(ImageFilter.GaussianBlur(radius=14))
+    # Keep bright warm pixels (>135) and tint toward warm amber-gold glow
+    r_hi = r_ch.point(lambda p: max(0, min(255, int((p - 132) * 1.55))) if p > 132 else 0)
+    g_hi = g_ch.point(lambda p: max(0, min(255, int((p - 138) * 1.15))) if p > 138 else 0)
+    b_hi = b_ch.point(lambda p: max(0, min(255, int((p - 155) * 0.60))) if p > 155 else 0)
+    a_hi = r_hi.point(lambda p: min(108, int(p * 0.48)))
+    bloom_small = Image.merge("RGBA", (r_hi, g_hi, b_hi, a_hi)).filter(ImageFilter.GaussianBlur(radius=15))
     bloom = bloom_small.resize((w, h), Image.Resampling.BILINEAR)
 
     # 2. Apply Midnight Emo S-curve LUT
@@ -295,6 +295,76 @@ def _cover_resize(img: Image.Image, target_w: int, target_h: int) -> Image.Image
     left = max(0, (new_w - target_w) // 2)
     top = max(0, (new_h - target_h) // 2)
     return resized.crop((left, top, left + target_w, top + target_h))
+
+
+class VideoClipSource:
+    """Lazy frame-sequence loader for Mode C 2.0 `scene_video` clips (.mp4/.mov/.webm/.gif)."""
+
+    def __init__(
+        self,
+        video_path: Path,
+        cache_dir: Path,
+        target_fps: int,
+        oversample_w: int,
+        oversample_h: int,
+    ) -> None:
+        self.video_path = video_path
+        self.target_fps = max(1, int(target_fps))
+        self.size = (oversample_w, oversample_h)
+        self._lru: dict[tuple[int, str], Image.Image] = {}
+        self._lru_order: list[tuple[int, str]] = []
+
+        clip_dir = cache_dir / f"vclip_{abs(hash(str(video_path.resolve()))) & 0xFFFFFFFF:08x}"
+        clip_dir.mkdir(parents=True, exist_ok=True)
+        existing = sorted(clip_dir.glob("f_*.jpg"))
+        if not existing:
+            cmd = [
+                "ffmpeg",
+                "-y",
+                "-v", "error",
+                "-i", str(video_path),
+                "-vf", f"fps={self.target_fps}",
+                "-q:v", "2",
+                str(clip_dir / "f_%05d.jpg"),
+            ]
+            res = subprocess.run(cmd, capture_output=True, text=True)
+            if res.returncode != 0:
+                raise RuntimeError(f"Failed to decode scene_video '{video_path}': {res.stderr.strip()}")
+            existing = sorted(clip_dir.glob("f_*.jpg"))
+        if not existing:
+            raise ValueError(f"No video frames decoded from '{video_path}'")
+        self.frame_paths = existing
+
+    def _map_index(self, clip_t: float, loop_mode: str) -> int:
+        n = len(self.frame_paths)
+        if n <= 1:
+            return 0
+        raw_idx = max(0, int(round(clip_t * self.target_fps)))
+        if loop_mode == "clamp":
+            return min(n - 1, raw_idx)
+        if loop_mode == "loop":
+            return raw_idx % n
+        # Default: seamless pingpong breathing loop
+        cycle = 2 * n - 2
+        pos = raw_idx % cycle
+        return pos if pos < n else cycle - pos
+
+    def get_frame(self, clip_t: float, loop_mode: str = "pingpong", grade: str = "midnight_emo") -> Image.Image:
+        idx = self._map_index(clip_t, loop_mode)
+        key = (idx, grade)
+        cached = self._lru.get(key)
+        if cached is not None:
+            return cached
+        raw_img = _safe_open_rgba(self.frame_paths[idx])
+        img = _cover_resize(raw_img, self.size[0], self.size[1])
+        if grade == "midnight_emo":
+            img = _apply_cinema_emo_grade(img)
+        self._lru[key] = img
+        self._lru_order.append(key)
+        if len(self._lru_order) > 6:
+            old_key = self._lru_order.pop(0)
+            self._lru.pop(old_key, None)
+        return img
 
 
 def build_base_backdrop(
@@ -944,8 +1014,10 @@ def _pick_frame_from_list(
         return frames[0]
     mode = sc.get("frame_mode", "pingpong")
     if mode == "natural_blink":
-        cycle_sec = max(0.25, float(sc.get("blink_interval", 2.5)))
-        phase = (local_t + 0.6) % cycle_sec
+        cycle_sec = max(0.45, float(sc.get("blink_interval", 2.1)))
+        # Keep eyes open at local_t=0.0 (Frame 0 cover), then trigger first blink at ~0.38s
+        lead = min(0.38, cycle_sec * 0.35)
+        phase = (local_t + cycle_sec - lead) % cycle_sec
         return frames[1] if phase < 0.16 else frames[0]
     if mode == "beat_toggle":
         beats_per = max(0.25, float(sc.get("beats_per_frame", 1.0)))
@@ -966,19 +1038,19 @@ def _build_text_scrim(text_pos: str, theme: ThemePalette) -> Image.Image:
     scrim = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
     draw = ImageDraw.Draw(scrim)
     base_col = (244, 238, 226) if theme.name == "paper_cream" else (10, 14, 18)
-    max_a_bot = 205 if theme.name == "paper_cream" else 175
-    max_a_top = 190 if theme.name == "paper_cream" else 155
+    max_a_bot = 195 if theme.name == "paper_cream" else 135
+    max_a_top = 180 if theme.name == "paper_cream" else 92
     if text_pos == "bottom":
-        y0, y1 = 1240, HEIGHT
+        y0, y1 = 1280, HEIGHT
         for y in range(y0, y1):
             frac = (y - y0) / (y1 - y0)
-            alpha = int(max_a_bot * (frac ** 1.3))
+            alpha = int(max_a_bot * (frac ** 1.35))
             draw.line([(0, y), (WIDTH, y)], fill=(*base_col, alpha))
     else:
-        y0, y1 = 0, 740
+        y0, y1 = 0, 580
         for y in range(y0, y1):
             frac = 1.0 - (y - y0) / (y1 - y0)
-            alpha = int(max_a_top * (frac ** 1.35))
+            alpha = int(max_a_top * (frac ** 1.45))
             draw.line([(0, y), (WIDTH, y)], fill=(*base_col, alpha))
     return scrim
 
@@ -1214,12 +1286,80 @@ def _sticker_dy(motion: str, local_t: float, local_beat: float, beat_sec: float,
     return 0.0
 
 
+def _compute_master_viewport(
+    sc: dict[str, Any],
+    t: float,
+    beat_sec: float,
+    oversample_w: int,
+    oversample_h: int,
+) -> tuple[float, float, float, float, float, float, float, float, float]:
+    """Compute normalized [0..1] camera viewport (vx0, vy0, vx1, vy1) on the uncropped master keyframe."""
+    local_t = max(0.0, t - sc["start_t"])
+    scene_dur = max(0.01, sc["end_t"] - sc["start_t"])
+    scene_prog = max(0.0, min(1.0, local_t / scene_dur))
+    local_beat = local_t / beat_sec
+    cam = sc.get("camera", "static")
+
+    # Hybrid easing with non-zero initial velocity so the first 1.5s has immediate optical flow
+    prog_eased = 0.34 * scene_prog + 0.66 * ease_in_out_sine(scene_prog)
+    zoom = 1.0
+    pan_x = 0.0
+    pan_y = 0.0
+
+    if cam == "push_in":
+        zoom = 1.0 + 0.10 * prog_eased
+    elif cam == "pull_out":
+        zoom = 1.10 - 0.10 * prog_eased
+    elif cam == "pan_left":
+        zoom = 1.07
+        pan_x = 0.68 - 1.36 * prog_eased
+    elif cam == "pan_right":
+        zoom = 1.07
+        pan_x = -0.68 + 1.36 * prog_eased
+    elif cam == "pan_up":
+        zoom = 1.07
+        pan_y = 0.68 - 1.36 * prog_eased
+    elif cam == "pan_down":
+        zoom = 1.07
+        pan_y = -0.68 + 1.36 * prog_eased
+    elif cam == "drift_diag":
+        zoom = 1.02 + 0.08 * prog_eased
+        pan_x = -0.48 + 0.96 * prog_eased
+        pan_y = 0.38 - 0.76 * prog_eased
+    else:
+        zoom = 1.035 + 0.022 * math.sin(math.pi * local_beat / 2.0)
+
+    crop_box = sc.get("_crop_box")
+    if crop_box is not None:
+        bx0, by0, bx1, by1 = crop_box
+        base_span = max(0.15, min(bx1 - bx0, by1 - by0))
+        bcx = (bx0 + bx1) / 2.0
+        bcy = (by0 + by1) / 2.0
+    else:
+        base_span = 1.0
+        bcx = 0.5
+        bcy = 0.5
+
+    breath_dx = 6.0 * math.sin(t * 1.25)
+    breath_dy = 7.5 * math.cos(t * 0.98)
+    base_ratio = WIDTH / max(1, oversample_w)
+    vis_span = min(base_span, (base_span * base_ratio) / max(0.5, zoom))
+    slack = max(0.0, (base_span - vis_span) / 2.0)
+
+    cx = bcx + pan_x * slack * 0.86 + (breath_dx / max(1, oversample_w)) * base_span
+    cy = bcy + pan_y * slack * 0.86 + (breath_dy / max(1, oversample_h)) * base_span
+    vx0 = max(0.0, min(1.0 - vis_span, cx - vis_span / 2.0))
+    vy0 = max(0.0, min(1.0 - vis_span, cy - vis_span / 2.0))
+    return vx0, vy0, vx0 + vis_span, vy0 + vis_span, zoom, pan_x, pan_y, breath_dx, breath_dy
+
+
 def _render_visual_stage(
     sc: dict[str, Any],
     t: float,
     beat_sec: float,
     assets: RenderAssets,
     theme: ThemePalette,
+    viewport_override: tuple[float, float, float, float] | None = None,
 ) -> Image.Image:
     """Render ONLY the visual stage layer (background, camera motion, 2.5D parallax, FX, doodles, vignette, scrim)."""
     local_t = max(0.0, t - sc["start_t"])
@@ -1230,55 +1370,33 @@ def _render_visual_stage(
     beat_pulse = math.exp(-7.0 * beat_phase)
     cam = sc.get("camera", "static")
 
-    scene_frames: list[Image.Image] = sc.get("scene_frames", [])
-    is_full_frame = len(scene_frames) > 0
+    video_clip: VideoClipSource | None = sc.get("_video_clip")
+    master_frames: list[Image.Image] = sc.get("_master_frames") or sc.get("scene_frames", [])
+    is_full_frame = (video_clip is not None) or (len(master_frames) > 0)
     overlay = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
     odraw = ImageDraw.Draw(overlay)
 
     if is_full_frame:
-        src = _pick_frame_from_list(scene_frames, sc, local_t, local_beat)
-        oversample_w, oversample_h = src.size
-        base_scale = WIDTH / oversample_w
-        zoom = 1.0
-        pan_x = 0.0
-        pan_y = 0.0
-        prog_eased = ease_in_out_sine(scene_prog)
-
-        if cam == "push_in":
-            zoom = 1.0 + 0.08 * prog_eased
-        elif cam == "pull_out":
-            zoom = 1.08 - 0.08 * prog_eased
-        elif cam == "pan_left":
-            zoom = 1.06
-            pan_x = 0.65 - 1.3 * prog_eased
-        elif cam == "pan_right":
-            zoom = 1.06
-            pan_x = -0.65 + 1.3 * prog_eased
-        elif cam == "pan_up":
-            zoom = 1.06
-            pan_y = 0.65 - 1.3 * prog_eased
-        elif cam == "pan_down":
-            zoom = 1.06
-            pan_y = -0.65 + 1.3 * prog_eased
-        elif cam == "drift_diag":
-            zoom = 1.02 + 0.06 * prog_eased
-            pan_x = -0.45 + 0.9 * prog_eased
-            pan_y = 0.35 - 0.7 * prog_eased
+        if video_clip is not None:
+            v_start = float(sc.get("video_start", 0.0))
+            v_speed = float(sc.get("video_speed", 1.0))
+            v_loop = str(sc.get("video_loop", "pingpong"))
+            v_grade = str(sc.get("_shot_grade", "midnight_emo"))
+            src = video_clip.get_frame(max(0.0, v_start + local_t * v_speed), loop_mode=v_loop, grade=v_grade)
         else:
-            zoom = 1.03 + 0.016 * math.sin(math.pi * local_beat / 2.0)
+            src = _pick_frame_from_list(master_frames, sc, local_t, local_beat)
+        oversample_w, oversample_h = src.size
+        vx0, vy0, vx1, vy1, zoom, pan_x, pan_y, breath_dx, breath_dy = _compute_master_viewport(
+            sc, t, beat_sec, oversample_w, oversample_h
+        )
+        if viewport_override is not None:
+            vx0, vy0, vx1, vy1 = viewport_override
 
-        breath_dx = 5.0 * math.sin(t * 1.15)
-        breath_dy = 6.5 * math.cos(t * 0.92)
-        eff_scale = base_scale * zoom
-        crop_w = WIDTH / eff_scale
-        crop_h = HEIGHT / eff_scale
-        slack_x = max(0.0, (oversample_w - crop_w) / 2.0)
-        slack_y = max(0.0, (oversample_h - crop_h) / 2.0)
-        cx = oversample_w / 2.0 + pan_x * slack_x * 0.85 + breath_dx
-        cy = oversample_h / 2.0 + pan_y * slack_y * 0.85 + breath_dy
-        x0 = max(0.0, min(oversample_w - crop_w, cx - crop_w / 2.0))
-        y0 = max(0.0, min(oversample_h - crop_h, cy - crop_h / 2.0))
-        stage = src.crop((x0, y0, x0 + crop_w, y0 + crop_h)).resize((WIDTH, HEIGHT), Image.Resampling.BILINEAR)
+        x0 = max(0.0, min(oversample_w - 1.0, vx0 * oversample_w))
+        y0 = max(0.0, min(oversample_h - 1.0, vy0 * oversample_h))
+        x1 = max(x0 + 1.0, min(float(oversample_w), vx1 * oversample_w))
+        y1 = max(y0 + 1.0, min(float(oversample_h), vy1 * oversample_h))
+        stage = src.crop((x0, y0, x1, y1)).resize((WIDTH, HEIGHT), Image.Resampling.BILINEAR)
 
         fg_frames: list[Image.Image] = sc.get("fg_frames", [])
         if fg_frames:
@@ -1470,26 +1588,56 @@ def _render_typography_layer(
         lines: list[str] = sc.get("lines", [])
         highlights: list[str] = sc.get("highlight", [])
         text_anim = sc.get("text_anim", "beat_lines")
-        line_spacing = 104 if is_cinema_emo else 108
+        line_spacing = 112 if is_cinema_emo else 108
         text_pos = sc.get("text_pos", "top")
-        if text_pos == "bottom":
+        if sc.get("text_y") is not None:
+            anchor_y = int(sc["text_y"])
+        elif text_pos == "bottom":
             anchor_y = 1520
         elif text_pos == "center":
             anchor_y = 940
         else:
             anchor_y = 395 if is_cinema_emo else (430 if is_full_frame else 490)
         base_text_y = anchor_y - (len(lines) * line_spacing) // 2 + exit_dy
+        is_first_scene = bool(sc.get("_is_first_scene", False))
 
         eff_beats = max(1.5, (scene_dur - trans_offset) / beat_sec)
-        if text_anim == "typewriter_beat":
+        if is_first_scene and local_t <= 0.001:
+            # Frame 0 (t=0.00s): render complete opening subtitle & glowing underline for Douyin cover & 0-second hook
+            for idx_l, line_str in enumerate(lines):
+                draw_highlighted_line(
+                    tdraw,
+                    line_str,
+                    len(line_str),
+                    highlights,
+                    font_path,
+                    base_font_size,
+                    WIDTH // 2,
+                    base_text_y + idx_l * line_spacing,
+                    255,
+                    1.0,
+                    text_theme,
+                    line_seed=idx_l + 1,
+                    show_underline=show_underline,
+                    letter_spacing=letter_spacing,
+                    line_elapsed=10.0,
+                    char_step_sec=0.04,
+                    char_fade_sec=0.24,
+                    anim_style=text_anim,
+                    t=t,
+                    beat_pulse=beat_pulse,
+                )
+        elif text_anim == "typewriter_beat":
             total_chars = max(1, sum(len(s) for s in lines))
-            reveal_sec = max(0.85, min((scene_dur - trans_offset) * 0.56, total_chars * 0.095))
+            reveal_sec = max(0.75, min((scene_dur - trans_offset) * 0.52, total_chars * 0.085))
             char_step = reveal_sec / max(1, total_chars)
+            # In Shot 1, lead by ~0.55s so the first hook clause is already legible at t=0.03s instead of blank
+            eff_text_t = text_t + (max(0.55, len(lines[0]) * char_step * 0.65) if (is_first_scene and lines) else 0.0)
             consumed = 0
             for idx_l, line_str in enumerate(lines):
                 line_start_t = consumed * char_step
                 consumed += len(line_str)
-                if text_t < line_start_t:
+                if eff_text_t < line_start_t:
                     continue
                 draw_highlighted_line(
                     tdraw,
@@ -1506,14 +1654,15 @@ def _render_typography_layer(
                     line_seed=idx_l + 1,
                     show_underline=show_underline,
                     letter_spacing=letter_spacing,
-                    line_elapsed=text_t - line_start_t,
+                    line_elapsed=eff_text_t - line_start_t,
                     char_step_sec=char_step,
-                    char_fade_sec=0.24,
+                    char_fade_sec=0.22,
                     anim_style="typewriter_beat",
                     t=t,
                     beat_pulse=beat_pulse,
                 )
         else:
+            eff_text_t = text_t + (0.42 if is_first_scene else 0.0)
             for idx_l, line_str in enumerate(lines):
                 if text_anim in ("beat_lines", "fade_up"):
                     slot_beats = max(0.85, round((eff_beats * 0.62) / max(1, len(lines)) * 2.0) / 2.0) if len(lines) > 1 else 0.0
@@ -1529,7 +1678,7 @@ def _render_typography_layer(
                     c_step = 0.030
                     c_fade = 0.28
 
-                if text_t < appear_t:
+                if eff_text_t < appear_t:
                     continue
 
                 draw_highlighted_line(
@@ -1547,7 +1696,7 @@ def _render_typography_layer(
                     line_seed=idx_l + 1,
                     show_underline=show_underline,
                     letter_spacing=letter_spacing,
-                    line_elapsed=text_t - appear_t,
+                    line_elapsed=eff_text_t - appear_t,
                     char_step_sec=c_step,
                     char_fade_sec=c_fade,
                     anim_style=text_anim,
@@ -1643,6 +1792,8 @@ def compile_timeline(
     theme_override: str | None = None,
     bg_override: Path | None = None,
     load_images: bool = False,
+    video_cache_dir: Path | None = None,
+    video_fps: int = 30,
 ) -> tuple[float, ThemePalette, Path | None, list[dict[str, Any]]]:
     """Validate timeline schema and resolve all scene assets (shared by --validate and render_video)."""
     if not isinstance(data, dict):
@@ -1676,6 +1827,7 @@ def compile_timeline(
     compiled_scenes: list[dict[str, Any]] = []
     sticker_cache: dict[str, Image.Image] = {}
     scene_cache: dict[str, Image.Image] = {}
+    video_cache: dict[str, VideoClipSource] = {}
     oversample_w, oversample_h = int(WIDTH * 1.14), int(HEIGHT * 1.14)
     default_max_chars = max(4, int(data.get("max_chars_per_line", 14)))
     is_cinema_emo = str(data.get("style", "cinema_emo")) == "cinema_emo"
@@ -1712,16 +1864,25 @@ def compile_timeline(
             ("beats_per_frame", 0.1),
             ("frame_fps", 0.1),
             ("fg_scale", 0.05),
+            ("video_start", 0.0),
+            ("video_speed", 0.1),
         ):
             if sc.get(num_field) is not None:
                 val = float(sc[num_field])
                 if not (math.isfinite(val) and val >= min_val):
                     raise ValueError(f"Scene {idx_s} '{num_field}' must be >= {min_val}, got: {val}")
+        if sc.get("video_loop") is not None and str(sc["video_loop"]) not in ("pingpong", "loop", "clamp"):
+            raise ValueError(f"Scene {idx_s} 'video_loop' must be pingpong/loop/clamp, got: {sc['video_loop']!r}")
+        if sc.get("text_y") is not None:
+            ty = int(sc["text_y"])
+            if not (120 <= ty <= 1750):
+                raise ValueError(f"Scene {idx_s} 'text_y' must be in [120, 1750], got: {ty}")
 
         start_t = cur_beat * beat_sec
         end_t = (cur_beat + beats) * beat_sec
         cur_beat += beats
 
+        raw_scene_video = sc.get("scene_video")
         raw_scene_list = list(sc.get("scene_frames")) if sc.get("scene_frames") is not None else (
             [sc["scene_image"]] if sc.get("scene_image") else []
         )
@@ -1734,13 +1895,13 @@ def compile_timeline(
 
         if not isinstance(raw_scene_list, list) or not isinstance(raw_fg_list, list) or not isinstance(raw_sticker_list, list):
             raise ValueError(f"Scene {idx_s} frame lists must be arrays")
-        if not raw_scene_list and not raw_sticker_list:
+        if not raw_scene_video and not raw_scene_list and not raw_sticker_list:
             raise ValueError(
-                f"Scene {idx_s} must specify at least one visual asset ('scene_image', 'scene_frames', 'sticker', or 'frames')"
+                f"Scene {idx_s} must specify at least one visual asset ('scene_video', 'scene_image', 'scene_frames', 'sticker', or 'frames')"
             )
 
         # Auto-guard against stale blink frame when user replaces primary keyframe with external Banana 2.5 image
-        if sc.get("frame_mode") == "natural_blink" and len(raw_scene_list) >= 2:
+        if not raw_scene_video and sc.get("frame_mode") == "natural_blink" and len(raw_scene_list) >= 2:
             p0 = resolve_asset_path(str(raw_scene_list[0]), base_dir, skill_dir)
             try:
                 p1 = resolve_asset_path(str(raw_scene_list[1]), base_dir, skill_dir)
@@ -1750,29 +1911,60 @@ def compile_timeline(
                 raw_scene_list = [raw_scene_list[0]]
 
         scene_frames: list[Image.Image] = []
+        master_frames: list[Image.Image] = []
         fg_frames: list[Image.Image] = []
         sticker_frames: list[Image.Image] = []
+        video_clip: VideoClipSource | None = None
 
         shot_grade = str(sc.get("color_grade", default_grade))
-        for raw_sc in raw_scene_list:
-            resolved_scene = resolve_asset_path(str(raw_sc), base_dir, skill_dir)
-            if load_images:
-                s_key = f"{resolved_scene.resolve()}::{shot_grade}::{crop_box}"
-                if s_key not in scene_cache:
-                    raw_img = _safe_open_rgba(resolved_scene)
-                    if crop_box is not None:
-                        cw, ch = raw_img.size
-                        raw_img = raw_img.crop((
-                            int(cw * crop_box[0]),
-                            int(ch * crop_box[1]),
-                            int(cw * crop_box[2]),
-                            int(ch * crop_box[3]),
-                        ))
-                    resized_img = _cover_resize(raw_img, oversample_w, oversample_h)
-                    if shot_grade == "midnight_emo":
-                        resized_img = _apply_cinema_emo_grade(resized_img)
-                    scene_cache[s_key] = resized_img
-                scene_frames.append(scene_cache[s_key])
+        primary_scene_id: str | None = None
+        if raw_scene_video:
+            resolved_video = resolve_asset_path(str(raw_scene_video), base_dir, skill_dir)
+            primary_scene_id = str(resolved_video.resolve())
+            if load_images and video_cache_dir is not None:
+                v_key = primary_scene_id
+                if v_key not in video_cache:
+                    video_cache[v_key] = VideoClipSource(
+                        resolved_video,
+                        cache_dir=video_cache_dir,
+                        target_fps=video_fps,
+                        oversample_w=oversample_w,
+                        oversample_h=oversample_h,
+                    )
+                video_clip = video_cache[v_key]
+        else:
+            for idx_raw, raw_sc in enumerate(raw_scene_list):
+                resolved_scene = resolve_asset_path(str(raw_sc), base_dir, skill_dir)
+                if idx_raw == 0:
+                    primary_scene_id = str(resolved_scene.resolve())
+                if load_images:
+                    m_key = f"{resolved_scene.resolve()}::{shot_grade}::MASTER"
+                    if m_key not in scene_cache:
+                        raw_master = _safe_open_rgba(resolved_scene)
+                        resized_master = _cover_resize(raw_master, oversample_w, oversample_h)
+                        if shot_grade == "midnight_emo":
+                            resized_master = _apply_cinema_emo_grade(resized_master)
+                        scene_cache[m_key] = resized_master
+                    master_frames.append(scene_cache[m_key])
+
+                    s_key = f"{resolved_scene.resolve()}::{shot_grade}::{crop_box}"
+                    if crop_box is None:
+                        scene_frames.append(scene_cache[m_key])
+                    else:
+                        if s_key not in scene_cache:
+                            raw_img = _safe_open_rgba(resolved_scene)
+                            cw, ch = raw_img.size
+                            raw_img = raw_img.crop((
+                                int(cw * crop_box[0]),
+                                int(ch * crop_box[1]),
+                                int(cw * crop_box[2]),
+                                int(ch * crop_box[3]),
+                            ))
+                            resized_img = _cover_resize(raw_img, oversample_w, oversample_h)
+                            if shot_grade == "midnight_emo":
+                                resized_img = _apply_cinema_emo_grade(resized_img)
+                            scene_cache[s_key] = resized_img
+                        scene_frames.append(scene_cache[s_key])
 
         for raw_fg in raw_fg_list:
             resolved_fg = resolve_asset_path(str(raw_fg), base_dir, skill_dir)
@@ -1782,7 +1974,7 @@ def compile_timeline(
                     sticker_cache[f_key] = load_and_trim_sticker(resolved_fg)
                 fg_frames.append(sticker_cache[f_key])
 
-        if not raw_scene_list:
+        if not raw_scene_video and not raw_scene_list:
             for raw_s in raw_sticker_list:
                 resolved = resolve_asset_path(str(raw_s), base_dir, skill_dir)
                 if load_images:
@@ -1791,12 +1983,20 @@ def compile_timeline(
                         sticker_cache[key] = load_and_trim_sticker(resolved)
                     sticker_frames.append(sticker_cache[key])
 
+        anchor_probe_img: Image.Image | None = None
+        if load_images:
+            if video_clip is not None:
+                v_start = float(sc.get("video_start", 0.0))
+                anchor_probe_img = video_clip.get_frame(v_start, loop_mode=str(sc.get("video_loop", "pingpong")), grade=shot_grade)
+            elif scene_frames:
+                anchor_probe_img = scene_frames[0]
+
         resolved_light_pos = sc.get("light_pos")
-        if resolved_light_pos == "auto" and load_images and scene_frames:
-            resolved_light_pos = list(_detect_warm_light_anchor(scene_frames[0]))
+        if resolved_light_pos == "auto" and anchor_probe_img is not None:
+            resolved_light_pos = list(_detect_warm_light_anchor(anchor_probe_img))
         resolved_prop_pos = sc.get("prop_pos")
-        if resolved_prop_pos == "auto" and load_images and scene_frames:
-            resolved_prop_pos = list(_detect_warm_light_anchor(scene_frames[0]))
+        if resolved_prop_pos == "auto" and anchor_probe_img is not None:
+            resolved_prop_pos = list(_detect_warm_light_anchor(anchor_probe_img))
 
         raw_lines = sc.get("lines", [])
         if not isinstance(raw_lines, list):
@@ -1809,14 +2009,29 @@ def compile_timeline(
         max_line_chars = max(4, int(sc.get("max_chars_per_line", default_max_chars)))
         wrapped_lines = _wrap_cjk_lines([str(x) for x in raw_lines], max_chars=max_line_chars, highlights=highlights)
 
-        primary_src = str((raw_scene_list or raw_sticker_list)[0])
+        primary_src = str(raw_scene_video) if raw_scene_video else str((raw_scene_list or raw_sticker_list)[0])
         vis_src = f"{primary_src}#{crop_box}" if crop_box else primary_src
+
+        # Auto-upgrade same-image/same-video B-cam crop transitions from crossfade/warm_dissolve to camera_morph (zero ghosting)
+        eff_transition = str(sc.get("transition", "crossfade"))
+        if compiled_scenes and primary_scene_id is not None:
+            prev_scene_id = compiled_scenes[-1].get("_primary_scene_id")
+            if prev_scene_id == primary_scene_id and eff_transition in ("crossfade", "warm_dissolve"):
+                eff_transition = "camera_morph"
+
         compiled_scenes.append({
             **sc,
+            "transition": eff_transition,
             "light_pos": resolved_light_pos,
             "prop_pos": resolved_prop_pos,
             "_vis_src": vis_src,
+            "_primary_scene_id": primary_scene_id,
+            "_crop_box": crop_box,
+            "_shot_grade": shot_grade,
+            "_video_clip": video_clip,
+            "_master_frames": master_frames,
             "_cinema_emo": is_cinema_emo,
+            "_is_first_scene": (idx_s == 1),
             "_is_last_scene": (idx_s == len(scenes)),
             "hud": sc.get("hud", default_hud),
             "underline": sc.get("underline", default_underline),
@@ -1856,89 +2071,90 @@ def render_video(
 
     base_dir = timeline_path.parent
     skill_dir = Path(__file__).resolve().parent.parent
-
-    bpm, theme, bg_path, compiled_scenes = compile_timeline(
-        data,
-        base_dir=base_dir,
-        skill_dir=skill_dir,
-        theme_override=theme_override,
-        bg_override=bg_override,
-        load_images=True,
-    )
-    beat_sec = 60.0 / bpm
-    header_tag = str(data.get("tag", ""))
-    base_font_size = max(34, min(120, int(data.get("font_size", 52 if is_cinema_emo else 58))))
-
-    total_duration = compiled_scenes[-1]["end_t"]
-    total_frames = max(1, int(round(total_duration * fps)))
-    avg_shot_sec = total_duration / len(compiled_scenes)
-    total_chars = sum(len(ln.replace(" ", "").replace(".", "")) for cs in compiled_scenes for ln in cs.get("lines", []))
-    print(
-        f"Timeline: {len(compiled_scenes)} shots | {total_chars} chars | "
-        f"{bpm:g} BPM | {total_duration:.2f}s (avg {avg_shot_sec:.2f}s/shot)"
-    )
-    for warn in _validate_timeline_pacing(compiled_scenes, bpm):
-        print(warn, file=sys.stderr)
-
-    rng = random.Random(101)
-    assets = RenderAssets(
-        backdrop=build_base_backdrop(
-            theme,
-            bg_image_path=bg_path,
-            bg_scrim_alpha=int(data.get("bg_scrim_alpha", 120)),
-        ),
-        warm_glow=build_warm_glow(theme, 440),
-        vignette=_build_vignette(108 if is_cinema_emo else 82),
-        scrims={
-            "top": _build_text_scrim("top", theme),
-            "bottom": _build_text_scrim("bottom", theme),
-        },
-        bokeh_amber=_build_bokeh_orb(42, theme.accent_primary, alpha=38),
-        bokeh_teal=_build_bokeh_orb(52, theme.accent_secondary, alpha=32),
-        steam_puff=_build_steam_puff(),
-        sunbeam=_build_sunbeam_sprite(),
-        grain_tiles=_build_grain_tiles(4),
-        motes=[
-            (
-                rng.uniform(80, WIDTH - 80),
-                rng.uniform(180, 1650),
-                rng.uniform(2.5, 5.5),
-                rng.uniform(0.3, 0.9),
-                rng.uniform(0, 2 * math.pi),
-            )
-            for _ in range(22)
-        ],
-        bokeh_seeds=[
-            (
-                rng.uniform(60, WIDTH - 60),
-                rng.uniform(120, HEIGHT - 120),
-                rng.uniform(0.4, 1.1),
-                rng.uniform(0, 2 * math.pi),
-                idx % 2 == 0,
-            )
-            for idx in range(7)
-        ],
-        rain_drops=[
-            (
-                rng.uniform(60, WIDTH - 60),
-                rng.uniform(0, HEIGHT),
-                rng.uniform(260, 520),
-                rng.uniform(28, 62),
-            )
-            for _ in range(20)
-        ],
-    )
-    font_tag = load_font(resolved_font, 28)
-
     out_prefix.parent.mkdir(parents=True, exist_ok=True)
     silent_mp4 = out_prefix.parent / f"{out_prefix.name}_silent.mp4"
     preview_mp4 = out_prefix.parent / f"{out_prefix.name}_beat_preview.mp4"
-    trans_duration = max(0.0, float(data.get("transition_sec", min(0.58, beat_sec * 0.72))))
 
     with tempfile.TemporaryDirectory(dir=str(out_prefix.parent)) as tmp_dir:
         tmp_path = Path(tmp_dir)
         tmp_silent = tmp_path / "silent.mp4"
         tmp_preview = tmp_path / "preview.mp4"
+
+        bpm, theme, bg_path, compiled_scenes = compile_timeline(
+            data,
+            base_dir=base_dir,
+            skill_dir=skill_dir,
+            theme_override=theme_override,
+            bg_override=bg_override,
+            load_images=True,
+            video_cache_dir=tmp_path,
+            video_fps=fps,
+        )
+        beat_sec = 60.0 / bpm
+        header_tag = str(data.get("tag", ""))
+        base_font_size = max(34, min(120, int(data.get("font_size", 60 if is_cinema_emo else 58))))
+
+        total_duration = compiled_scenes[-1]["end_t"]
+        total_frames = max(1, int(round(total_duration * fps)))
+        avg_shot_sec = total_duration / len(compiled_scenes)
+        total_chars = sum(len(ln.replace(" ", "").replace(".", "")) for cs in compiled_scenes for ln in cs.get("lines", []))
+        print(
+            f"Timeline: {len(compiled_scenes)} shots | {total_chars} chars | "
+            f"{bpm:g} BPM | {total_duration:.2f}s (avg {avg_shot_sec:.2f}s/shot)"
+        )
+        for warn in _validate_timeline_pacing(compiled_scenes, bpm):
+            print(warn, file=sys.stderr)
+
+        rng = random.Random(101)
+        assets = RenderAssets(
+            backdrop=build_base_backdrop(
+                theme,
+                bg_image_path=bg_path,
+                bg_scrim_alpha=int(data.get("bg_scrim_alpha", 120)),
+            ),
+            warm_glow=build_warm_glow(theme, 440),
+            vignette=_build_vignette(64 if is_cinema_emo else 82),
+            scrims={
+                "top": _build_text_scrim("top", theme),
+                "bottom": _build_text_scrim("bottom", theme),
+            },
+            bokeh_amber=_build_bokeh_orb(42, theme.accent_primary, alpha=38),
+            bokeh_teal=_build_bokeh_orb(52, theme.accent_secondary, alpha=32),
+            steam_puff=_build_steam_puff(),
+            sunbeam=_build_sunbeam_sprite(),
+            grain_tiles=_build_grain_tiles(4),
+            motes=[
+                (
+                    rng.uniform(80, WIDTH - 80),
+                    rng.uniform(180, 1650),
+                    rng.uniform(2.5, 5.5),
+                    rng.uniform(0.3, 0.9),
+                    rng.uniform(0, 2 * math.pi),
+                )
+                for _ in range(22)
+            ],
+            bokeh_seeds=[
+                (
+                    rng.uniform(60, WIDTH - 60),
+                    rng.uniform(120, HEIGHT - 120),
+                    rng.uniform(0.4, 1.1),
+                    rng.uniform(0, 2 * math.pi),
+                    idx % 2 == 0,
+                )
+                for idx in range(7)
+            ],
+            rain_drops=[
+                (
+                    rng.uniform(60, WIDTH - 60),
+                    rng.uniform(0, HEIGHT),
+                    rng.uniform(260, 520),
+                    rng.uniform(28, 62),
+                )
+                for _ in range(20)
+            ],
+        )
+        font_tag = load_font(resolved_font, 28)
+        trans_duration = max(0.0, float(data.get("transition_sec", min(0.58, beat_sec * 0.72))))
 
         ffmpeg_cmd = [
             "ffmpeg",
@@ -1976,22 +2192,51 @@ def render_video(
                         scene_idx += 1
 
                     sc = compiled_scenes[scene_idx]
-                    visual_frame = _render_visual_stage(sc, t, beat_sec, assets, theme)
-
                     transition = sc.get("transition", "crossfade")
                     has_trans = (scene_idx > 0 and trans_duration > 0.005 and transition != "cut")
-                    if has_trans:
-                        local_t = t - sc["start_t"]
-                        if local_t < trans_duration:
-                            prev_sc = compiled_scenes[scene_idx - 1]
+                    local_t = t - sc["start_t"]
+
+                    if has_trans and local_t < trans_duration:
+                        prev_sc = compiled_scenes[scene_idx - 1]
+                        progress = local_t / trans_duration
+                        is_same_master = (
+                            transition == "camera_morph"
+                            or (
+                                prev_sc.get("_primary_scene_id") is not None
+                                and prev_sc.get("_primary_scene_id") == sc.get("_primary_scene_id")
+                                and transition in ("crossfade", "warm_dissolve", "camera_morph")
+                            )
+                        )
+                        has_morph_source = bool(sc.get("_master_frames") or sc.get("_video_clip") is not None)
+                        if is_same_master and has_morph_source:
+                            if sc.get("_video_clip") is not None:
+                                ow, oh = sc["_video_clip"].size
+                            else:
+                                ow, oh = sc["_master_frames"][0].size
+                            vp_prev = _compute_master_viewport(prev_sc, sc["start_t"], beat_sec, ow, oh)
+                            vp_cur = _compute_master_viewport(sc, t, beat_sec, ow, oh)
+                            p_morph = ease_in_out_sine(progress)
+                            vp_lerp = (
+                                vp_prev[0] + (vp_cur[0] - vp_prev[0]) * p_morph,
+                                vp_prev[1] + (vp_cur[1] - vp_prev[1]) * p_morph,
+                                vp_prev[2] + (vp_cur[2] - vp_prev[2]) * p_morph,
+                                vp_prev[3] + (vp_cur[3] - vp_prev[3]) * p_morph,
+                            )
+                            visual_frame = _render_visual_stage(
+                                sc, t, beat_sec, assets, theme, viewport_override=vp_lerp
+                            )
+                        else:
+                            visual_frame = _render_visual_stage(sc, t, beat_sec, assets, theme)
                             prev_visual = _render_visual_stage(prev_sc, t, beat_sec, assets, theme)
                             visual_frame = _apply_transition(
                                 prev_visual,
                                 visual_frame,
                                 transition,
-                                local_t / trans_duration,
+                                progress,
                                 theme,
                             )
+                    else:
+                        visual_frame = _render_visual_stage(sc, t, beat_sec, assets, theme)
 
                     eff_trans_offset = (trans_duration * 0.56) if has_trans else 0.0
                     text_layer = _render_typography_layer(

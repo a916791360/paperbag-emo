@@ -3,4 +3,7 @@ __pycache__/
 *.pyc
 studio/output/*.mp4
 studio/output/*.png
+studio/scenes/**/*.mp4
+studio/scenes/**/*.mov
+studio/scenes/**/*.MOV
 studio/archive/

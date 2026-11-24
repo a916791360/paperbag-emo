@@ -1,0 +1,164 @@
+{
+  "bpm": 78,
+  "theme": "late_night",
+  "style": "cinema_emo",
+  "hud": "none",
+  "underline": true,
+  "tag": "深夜纸袋人 · 我会救自己千千万万次",
+  "transition_sec": 0.48,
+  "scenes": [
+    {
+      "beats": 4.0,
+      "scene_video": "studio/scenes/ziji/s1_rise_from_floor.mp4",
+      "video_start": 4.2,
+      "video_speed": 1.0,
+      "video_loop": "clamp",
+      "lines": [
+        "没关系，",
+        "我会救自己千千万万次。"
+      ],
+      "highlight": ["救自己", "千千万万次"],
+      "camera": "push_in",
+      "light_pos": "auto",
+      "fx": ["film_grain"],
+      "text_anim": "typewriter_beat",
+      "text_pos": "top",
+      "text_y": 320
+    },
+    {
+      "beats": 4.5,
+      "scene_video": "studio/scenes/ziji/s2_cold_rain_stand_tall.mp4",
+      "video_start": 0.0,
+      "video_speed": 1.0,
+      "video_loop": "clamp",
+      "lines": [
+        "别人给我上了一课，",
+        "那是别人的本事。"
+      ],
+      "highlight": ["上了一课", "别人的本事"],
+      "camera": "breathe",
+      "transition": "luma_fade",
+      "light_pos": "auto",
+      "fx": ["film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top",
+      "text_y": 300
+    },
+    {
+      "beats": 4.0,
+      "scene_video": "studio/scenes/ziji/s2_cold_rain_stand_tall.mp4",
+      "video_start": 3.46,
+      "video_speed": 1.0,
+      "video_loop": "clamp",
+      "crop_box": [0.14, 0.03, 0.88, 0.77],
+      "lines": [
+        "如果我走不出来，",
+        "那就是我的无能。"
+      ],
+      "highlight": ["走不出来", "我的无能"],
+      "camera": "push_in",
+      "transition": "camera_morph",
+      "light_pos": "auto",
+      "fx": ["film_grain"],
+      "text_anim": "slam_center",
+      "text_pos": "top",
+      "text_y": 245
+    },
+    {
+      "beats": 5.0,
+      "scene_video": "studio/scenes/ziji/s3_tempering_stairs_climb.mp4",
+      "video_start": 1.05,
+      "video_speed": 0.68,
+      "video_loop": "clamp",
+      "lines": [
+        "无需原谅或者释怀，",
+        "毕竟这堂无比艰难的课，"
+      ],
+      "highlight": ["无需原谅", "无比艰难的课"],
+      "camera": "push_in",
+      "transition": "luma_fade",
+      "light_pos": "auto",
+      "fx": ["film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top",
+      "text_y": 270
+    },
+    {
+      "beats": 5.5,
+      "scene_video": "studio/scenes/ziji/s3_tempering_stairs_climb.mp4",
+      "video_start": 3.66,
+      "video_speed": 0.65,
+      "video_loop": "clamp",
+      "crop_box": [0.10, 0.02, 0.86, 0.78],
+      "lines": [
+        "真切地斩我天真，杀我幼稚，",
+        "磨我心性，练我筋骨，"
+      ],
+      "highlight": ["斩我天真", "磨我心性", "练我筋骨"],
+      "camera": "push_in",
+      "transition": "camera_morph",
+      "light_pos": "auto",
+      "fx": ["film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top",
+      "text_y": 235
+    },
+    {
+      "beats": 3.0,
+      "scene_video": "studio/scenes/ziji/s4_dawn_tunnel_exit.mp4",
+      "video_start": 2.4,
+      "video_speed": 1.0,
+      "video_loop": "clamp",
+      "lines": [
+        "但它终将助我成长。"
+      ],
+      "highlight": ["助我成长"],
+      "camera": "pull_out",
+      "transition": "warm_dissolve",
+      "light_pos": "auto",
+      "fx": ["film_grain"],
+      "text_anim": "slam_center",
+      "text_pos": "top",
+      "text_y": 215
+    },
+    {
+      "beats": 4.5,
+      "scene_video": "studio/scenes/ziji/s5_own_benefactor_sunrise.mp4",
+      "video_start": 1.0,
+      "video_speed": 1.0,
+      "video_loop": "clamp",
+      "lines": [
+        "我想，在这段经历里，",
+        "最重要的贵人，"
+      ],
+      "highlight": ["最重要的贵人"],
+      "camera": "breathe",
+      "transition": "luma_fade",
+      "light_pos": "auto",
+      "fx": ["film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top",
+      "text_y": 265
+    },
+    {
+      "beats": 5.0,
+      "scene_video": "studio/scenes/ziji/s5_own_benefactor_sunrise.mp4",
+      "video_start": 4.46,
+      "video_speed": 1.0,
+      "video_loop": "clamp",
+      "crop_box": [0.10, 0.01, 0.88, 0.79],
+      "lines": [
+        "会是那个从心脉受损的状态里，",
+        "爬出来的自己。"
+      ],
+      "highlight": ["心脉受损", "爬出来的自己"],
+      "camera": "push_in",
+      "transition": "camera_morph",
+      "light_pos": "auto",
+      "fx": ["film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top",
+      "text_y": 235
+    }
+  ]
+}

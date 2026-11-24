@@ -1,0 +1,179 @@
+{
+  "bpm": 76,
+  "theme": "late_night",
+  "style": "cinema_emo",
+  "hud": "none",
+  "underline": true,
+  "tag": "深夜纸袋人 · 我总是祝福着你",
+  "transition_sec": 0.52,
+  "scenes": [
+    {
+      "beats": 4.5,
+      "scene_frames": [
+        "studio/scenes/zhufu/s1_time_passing_window.jpg",
+        "studio/scenes/zhufu/s1_time_passing_window_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 2.0,
+      "lines": [
+        "很久很久以后，",
+        "你或许会突然意识到，"
+      ],
+      "highlight": ["很久很久以后", "突然意识到"],
+      "camera": "push_in",
+      "light_pos": "auto",
+      "cat_pos": [0.22, 0.78],
+      "fx": ["rain_glass", "bokeh_depth", "film_grain"],
+      "text_anim": "typewriter_beat",
+      "text_pos": "top"
+    },
+    {
+      "beats": 5.0,
+      "scene_frames": [
+        "studio/scenes/zhufu/s2_tangled_doubt_shadow.jpg",
+        "studio/scenes/zhufu/s2_tangled_doubt_shadow_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 2.1,
+      "lines": [
+        "谁对谁错，何是何非，",
+        "由爱生疑，由疑生恨，"
+      ],
+      "highlight": ["由爱生疑", "由疑生恨"],
+      "camera": "drift_diag",
+      "transition": "luma_fade",
+      "light_pos": "auto",
+      "cat_pos": [0.74, 0.77],
+      "fx": ["purr_waves", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4.5,
+      "scene_frames": [
+        "studio/scenes/zhufu/s2_tangled_doubt_shadow.jpg",
+        "studio/scenes/zhufu/s2_tangled_doubt_shadow_blink.jpg"
+      ],
+      "crop_box": [0.14, 0.18, 0.88, 0.88],
+      "frame_mode": "natural_blink",
+      "blink_interval": 1.9,
+      "lines": [
+        "或者难以释怀的背弃，",
+        "无法谅解的谎言。"
+      ],
+      "highlight": ["难以释怀的背弃", "无法谅解的谎言"],
+      "camera": "push_in",
+      "transition": "camera_morph",
+      "light_pos": "auto",
+      "fx": ["film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 3.5,
+      "scene_frames": [
+        "studio/scenes/zhufu/s3_sudden_sting_chest.jpg",
+        "studio/scenes/zhufu/s3_sudden_sting_chest_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 2.0,
+      "lines": [
+        "生命中会突然刺痛你的，"
+      ],
+      "highlight": ["突然刺痛你的"],
+      "camera": "push_in",
+      "transition": "luma_fade",
+      "light_pos": "auto",
+      "cat_pos": [0.68, 0.84],
+      "fx": ["lamp_flicker", "bokeh_depth", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 3.5,
+      "scene_frames": [
+        "studio/scenes/zhufu/s3_sudden_sting_chest.jpg",
+        "studio/scenes/zhufu/s3_sudden_sting_chest_blink.jpg"
+      ],
+      "crop_box": [0.14, 0.24, 0.88, 0.88],
+      "frame_mode": "natural_blink",
+      "blink_interval": 1.8,
+      "lines": [
+        "使你感到遗憾、伤痛的，"
+      ],
+      "highlight": ["遗憾、伤痛"],
+      "camera": "breathe",
+      "transition": "camera_morph",
+      "light_pos": "auto",
+      "fx": ["lamp_flicker", "film_grain"],
+      "text_anim": "slam_center",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4.0,
+      "scene_image": "studio/scenes/zhufu/s4_song_and_photo_cutaway.jpg",
+      "lines": [
+        "不论是一首歌曲、一张照片，"
+      ],
+      "highlight": ["一首歌曲", "一张照片"],
+      "camera": "pan_right",
+      "transition": "luma_fade",
+      "prop_pos": "auto",
+      "prop_color": "amber",
+      "fx": ["prop_pulse", "film_grain"],
+      "text_anim": "typewriter_beat",
+      "text_pos": "top"
+    },
+    {
+      "beats": 3.5,
+      "scene_image": "studio/scenes/zhufu/s5_unseen_person_platform.jpg",
+      "lines": [
+        "或一个你再也无法见到的人，"
+      ],
+      "highlight": ["再也无法见到的人"],
+      "camera": "pan_left",
+      "transition": "crossfade",
+      "light_pos": "auto",
+      "fx": ["bokeh_depth", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 5.0,
+      "scene_image": "studio/scenes/zhufu/s5_unseen_person_platform.jpg",
+      "crop_box": [0.06, 0.22, 0.80, 0.94],
+      "lines": [
+        "事过境迁，你心中留下的，",
+        "或许还是那句话："
+      ],
+      "highlight": ["事过境迁", "还是那句话"],
+      "camera": "push_in",
+      "transition": "camera_morph",
+      "light_pos": "auto",
+      "cat_pos": [0.41, 0.87],
+      "fx": ["purr_waves", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top"
+    },
+    {
+      "beats": 4.5,
+      "scene_frames": [
+        "studio/scenes/zhufu/s6_always_blessing_dawn.jpg",
+        "studio/scenes/zhufu/s6_always_blessing_dawn_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 2.0,
+      "lines": [
+        "我总是祝福着你。"
+      ],
+      "highlight": ["我总是祝福着你"],
+      "camera": "pull_out",
+      "transition": "warm_dissolve",
+      "light_pos": "auto",
+      "cat_pos": [0.71, 0.88],
+      "fx": ["purr_waves", "bokeh_depth", "film_grain"],
+      "text_anim": "slam_center",
+      "text_pos": "top"
+    }
+  ]
+}
