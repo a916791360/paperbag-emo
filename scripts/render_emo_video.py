@@ -1014,11 +1014,25 @@ def _pick_frame_from_list(
         return frames[0]
     mode = sc.get("frame_mode", "pingpong")
     if mode == "natural_blink":
-        cycle_sec = max(0.45, float(sc.get("blink_interval", 2.1)))
-        # Keep eyes open at local_t=0.0 (Frame 0 cover), then trigger first blink at ~0.38s
-        lead = min(0.38, cycle_sec * 0.35)
-        phase = (local_t + cycle_sec - lead) % cycle_sec
-        return frames[1] if phase < 0.16 else frames[0]
+        cycle_sec = max(0.6, float(sc.get("blink_interval", 3.8)))
+        default_delay = min(1.45, cycle_sec * 0.42)
+        delay = max(0.0, float(sc.get("blink_delay", default_delay)))
+        if local_t < delay:
+            return frames[0]
+        phase = (local_t - delay) % cycle_sec
+        if len(frames) >= 3:
+            # Smooth 5-stage anime blink: open -> half -> closed -> half -> open
+            dur = max(0.10, float(sc.get("blink_duration", 0.24)))
+            if phase >= dur:
+                return frames[0]
+            u = phase / dur
+            if u < 0.22:
+                return frames[1]
+            if u < 0.68:
+                return frames[2]
+            return frames[1]
+        dur = max(0.08, float(sc.get("blink_duration", 0.20)))
+        return frames[1] if phase < dur else frames[0]
     if mode == "beat_toggle":
         beats_per = max(0.25, float(sc.get("beats_per_frame", 1.0)))
         idx = int(local_beat / beats_per) % len(frames)
@@ -1110,6 +1124,127 @@ def _build_grain_tiles(count: int = 4) -> list[Image.Image]:
     return tiles
 
 
+def _build_mist_band() -> Image.Image:
+    """Pre-bake a soft horizontal drifting night mist band (2x width for seamless scrolling)."""
+    band_w = WIDTH * 2
+    band_h = 540
+    mist = Image.new("RGBA", (band_w, band_h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(mist)
+    blobs = [
+        (0.12, 0.56, 360, 120, 26),
+        (0.34, 0.48, 420, 140, 22),
+        (0.58, 0.60, 390, 130, 28),
+        (0.82, 0.50, 440, 135, 22),
+    ]
+    for fx, fy, rx, ry, alpha in blobs:
+        cx = int(band_w * fx)
+        cy = int(band_h * fy)
+        for shift in (0, -band_w, band_w):
+            draw.ellipse([cx + shift - rx, cy - ry, cx + shift + rx, cy + ry], fill=(168, 198, 206, alpha))
+    return mist.filter(ImageFilter.GaussianBlur(radius=68))
+
+
+def _apply_local_micro_motion(
+    src: Image.Image,
+    sc: dict[str, Any],
+    local_t: float,
+    t: float,
+) -> Image.Image:
+    """Apply pixel-locked micro-motion in source-image space BEFORE viewport cropping.
+
+    Supports:
+      - cat_box ([x0, y0, x1, y1]): subtle bottom-anchored breathing rise/fall (never exposes holes)
+      - cat_ear_box ([x0, y0, x1, y1]): occasional subtle anime ear twitch staggered from blink
+      - fx "cursor_blink" with cursor_pos / cursor_angle / cursor_len: pulsing chat input cursor
+    """
+    cat_box = sc.get("_cat_box")
+    ear_box = sc.get("_cat_ear_box")
+    raw_fx = sc.get("fx", [])
+    fx_list = [raw_fx] if isinstance(raw_fx, str) else list(raw_fx)
+    has_cursor = "cursor_blink" in fx_list and sc.get("cursor_pos") is not None
+    if cat_box is None and ear_box is None and not has_cursor:
+        return src
+
+    out = src.copy()
+    w, h = out.size
+
+    if cat_box is not None:
+        bx0, by0, bx1, by1 = cat_box
+        x0, y0 = int(round(bx0 * w)), int(round(by0 * h))
+        x1, y1 = int(round(bx1 * w)), int(round(by1 * h))
+        bw, bh = x1 - x0, y1 - y0
+        if bw >= 16 and bh >= 16:
+            period = max(0.8, float(sc.get("cat_breath_period", 2.9)))
+            amp = max(0.0, min(0.08, float(sc.get("cat_breath_amp", 0.026))))
+            # Strictly >= 1.0 upward expansion anchored at bottom edge so zero background gaps appear
+            breath = 0.5 - 0.5 * math.cos(2.0 * math.pi * t / period)
+            scale_y = 1.0 + amp * breath
+            scale_x = 1.0 + amp * 0.35 * breath
+            if scale_y > 1.001:
+                patch = out.crop((x0, y0, x1, y1))
+                nw = max(bw, int(round(bw * scale_x)))
+                nh = max(bh, int(round(bh * scale_y)))
+                scaled = patch.resize((nw, nh), Image.Resampling.BILINEAR)
+                mask = Image.new("L", (nw, nh), 0)
+                mdraw = ImageDraw.Draw(mask)
+                pad_x = max(4, nw // 10)
+                pad_top = max(4, nh // 10)
+                mdraw.ellipse([pad_x, pad_top, nw - pad_x, nh + nh // 4], fill=255)
+                mask = mask.filter(ImageFilter.GaussianBlur(radius=max(4, min(nw, nh) // 10)))
+                px = x0 - (nw - bw) // 2
+                py = y1 - nh
+                out.paste(scaled, (px, py), mask)
+
+    if ear_box is not None:
+        ex0, ey0, ex1, ey1 = ear_box
+        x0, y0 = int(round(ex0 * w)), int(round(ey0 * h))
+        x1, y1 = int(round(ex1 * w)), int(round(ey1 * h))
+        ew, eh = x1 - x0, y1 - y0
+        if ew >= 12 and eh >= 12:
+            interval = max(1.0, float(sc.get("cat_twitch_interval", 3.4)))
+            delay = max(0.0, float(sc.get("cat_twitch_delay", 0.95)))
+            if local_t >= delay:
+                phase = (local_t - delay) % interval
+                dur = 0.24
+                if phase < dur:
+                    u = phase / dur
+                    # Crisp double-flick ear twitch envelope
+                    flick = math.sin(2.0 * math.pi * u) * math.sin(math.pi * u)
+                    angle = 3.2 * flick
+                    if abs(angle) > 0.12:
+                        patch = out.crop((x0, y0, x1, y1))
+                        rot = patch.rotate(angle, resample=Image.Resampling.BILINEAR, expand=False)
+                        mask = Image.new("L", (ew, eh), 0)
+                        mdraw = ImageDraw.Draw(mask)
+                        pad = max(3, min(ew, eh) // 8)
+                        mdraw.ellipse([pad, pad, ew - pad, eh - pad], fill=255)
+                        mask = mask.filter(ImageFilter.GaussianBlur(radius=max(3, min(ew, eh) // 9)))
+                        out.paste(rot, (x0, y0), mask)
+
+    if has_cursor:
+        cpos = _parse_pos_pair(sc.get("cursor_pos"), (0.50, 0.78), "cursor_pos")
+        cx = int(round(cpos[0] * w))
+        cy = int(round(cpos[1] * h))
+        c_angle = float(sc.get("cursor_angle", -32.0))
+        c_len = max(8.0, float(sc.get("cursor_len", 26.0)))
+        c_width = max(2, int(round(float(sc.get("cursor_width", 3.5)))))
+        # Realistic 1.08s blinking text cursor with crisp hold & smooth fade
+        blink_wave = 0.5 + 0.5 * math.sin(2.0 * math.pi * (t / 1.08))
+        alpha = int(235 * (blink_wave ** 0.55))
+        if alpha > 12:
+            rad = math.radians(c_angle)
+            dx = (c_len / 2.0) * math.sin(rad)
+            dy = (c_len / 2.0) * math.cos(rad)
+            c_overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+            cdraw = ImageDraw.Draw(c_overlay)
+            c_col = sc.get("cursor_color", "dark")
+            rgb = (244, 184, 96) if c_col == "amber" else (28, 36, 44)
+            cdraw.line([(cx - dx, cy - dy), (cx + dx, cy + dy)], fill=(*rgb, alpha), width=c_width)
+            out = Image.alpha_composite(out, c_overlay)
+
+    return out
+
+
 @dataclass
 class RenderAssets:
     backdrop: Image.Image
@@ -1120,10 +1255,12 @@ class RenderAssets:
     bokeh_teal: Image.Image
     steam_puff: Image.Image
     sunbeam: Image.Image
+    mist_band: Image.Image
     grain_tiles: list[Image.Image]
     motes: list[tuple[float, float, float, float, float]]
     bokeh_seeds: list[tuple[float, float, float, float, bool]]
     rain_drops: list[tuple[float, float, float, float]]
+    dust_seeds: list[tuple[float, float, float, float, float]]
 
 
 def _apply_sensory_fx(
@@ -1171,10 +1308,55 @@ def _apply_sensory_fx(
                 stage.alpha_composite(orb, (bx - orb.width // 2, by - orb.height // 2))
 
         elif fx == "rain_glass":
-            for rx0, ry0, rspeed, rlen in assets.rain_drops:
-                ry = (ry0 + t * rspeed) % (HEIGHT - 120)
-                overlay_draw.line([(rx0, ry), (rx0 - 5, ry + rlen)], fill=(176, 212, 220, 52), width=2)
-                overlay_draw.ellipse([rx0 - 8, ry + rlen - 3, rx0 - 2, ry + rlen + 3], fill=(215, 236, 240, 72))
+            for idx_r, (rx0, ry0, rspeed, rlen) in enumerate(assets.rain_drops):
+                # Dual-layer depth rain: subtle distant mist-drizzle + foreground diagonal streaks
+                is_near = (idx_r % 3 == 0)
+                ry = (ry0 + t * rspeed * (1.25 if is_near else 0.78)) % (HEIGHT - 80)
+                drift_x = -8 if is_near else -4
+                line_a = 62 if is_near else 34
+                line_w = 2 if is_near else 1
+                overlay_draw.line([(rx0, ry), (rx0 + drift_x, ry + rlen)], fill=(182, 216, 224, line_a), width=line_w)
+                if is_near:
+                    overlay_draw.ellipse([rx0 + drift_x - 2, ry + rlen - 2, rx0 + drift_x + 2, ry + rlen + 2], fill=(224, 240, 244, 68))
+
+        elif fx == "mist_drift":
+            mist_y = float(sc.get("mist_y", 0.58))
+            my = int(HEIGHT * mist_y) - assets.mist_band.height // 2
+            scroll_x = int((t * 26.0) % WIDTH)
+            band_crop = assets.mist_band.crop((scroll_x, 0, scroll_x + WIDTH, assets.mist_band.height))
+            breath_op = 0.72 + 0.28 * math.sin(t * 0.65)
+            if breath_op < 0.99:
+                band_crop = band_crop.copy()
+                band_crop.putalpha(band_crop.getchannel("A").point(lambda a, f=breath_op: int(a * f)))
+            stage.alpha_composite(band_crop, (0, my))
+
+        elif fx == "dust_drift":
+            for dx0, dy0, dr, dspeed, dphase in assets.dust_seeds:
+                dx = (dx0 + t * 14.0 * dspeed + 26.0 * math.sin(t * 0.85 * dspeed + dphase)) % WIDTH
+                dy = (dy0 - t * 18.0 * dspeed + 18.0 * math.cos(t * 0.65 * dspeed + dphase)) % (HEIGHT - 220) + 110
+                twinkle = 0.35 + 0.65 * (0.5 + 0.5 * math.sin(t * 2.1 * dspeed + dphase))
+                core_a = int(125 * twinkle)
+                halo_a = int(38 * twinkle)
+                if halo_a > 6:
+                    overlay_draw.ellipse([dx - dr * 2.4, dy - dr * 2.4, dx + dr * 2.4, dy + dr * 2.4], fill=(*theme.accent_primary, halo_a))
+                if core_a > 10:
+                    overlay_draw.ellipse([dx - dr, dy - dr, dx + dr, dy + dr], fill=(255, 236, 192, core_a))
+
+        elif fx == "water_shimmer":
+            sbox = sc.get("_shimmer_box") or (0.52, 0.58, 0.98, 0.84)
+            sx0, sy0 = int(WIDTH * sbox[0]), int(HEIGHT * sbox[1])
+            sx1, sy1 = int(WIDTH * sbox[2]), int(HEIGHT * sbox[3])
+            sw, sh = max(40, sx1 - sx0), max(30, sy1 - sy0)
+            for idx_w in range(14):
+                frac_y = (idx_w + 0.5) / 14.0
+                wy = sy0 + int(sh * frac_y)
+                phase_w = t * (1.35 + 0.12 * (idx_w % 4)) + idx_w * 1.9
+                shimmer = 0.5 + 0.5 * math.sin(phase_w)
+                alpha_w = int((26 + 38 * shimmer) * (0.65 + 0.35 * frac_y))
+                seg_len = int(28 + 44 * shimmer)
+                wx = sx0 + int(((idx_w * 73 + t * 12) % max(1, sw - seg_len)))
+                col_w = theme.accent_primary if idx_w % 2 == 0 else (188, 214, 222)
+                overlay_draw.line([(wx, wy), (wx + seg_len, wy)], fill=(*col_w, alpha_w), width=2)
 
         elif fx == "cat_zzz":
             pos = _parse_pos_pair(sc.get("cat_pos"), (0.74, 0.72), "cat_pos")
@@ -1385,6 +1567,7 @@ def _render_visual_stage(
             src = video_clip.get_frame(max(0.0, v_start + local_t * v_speed), loop_mode=v_loop, grade=v_grade)
         else:
             src = _pick_frame_from_list(master_frames, sc, local_t, local_beat)
+            src = _apply_local_micro_motion(src, sc, local_t, t)
         oversample_w, oversample_h = src.size
         vx0, vy0, vx1, vy1, zoom, pan_x, pan_y, breath_dx, breath_dy = _compute_master_viewport(
             sc, t, beat_sec, oversample_w, oversample_h
@@ -1852,15 +2035,25 @@ def compile_timeline(
             ("steam_pos", (0.52, 0.62)),
             ("cat_pos", (0.74, 0.72)),
             ("prop_pos", (0.70, 0.56)),
+            ("cursor_pos", (0.50, 0.78)),
         ):
             if sc.get(pos_field) is not None:
                 _parse_pos_pair(sc.get(pos_field), pos_def, f"scenes[{idx_s}].{pos_field}")
 
         crop_box = _parse_crop_box(sc.get("crop_box"), f"scenes[{idx_s}].crop_box")
+        cat_box = _parse_crop_box(sc.get("cat_box"), f"scenes[{idx_s}].cat_box")
+        cat_ear_box = _parse_crop_box(sc.get("cat_ear_box"), f"scenes[{idx_s}].cat_ear_box")
+        shimmer_box = _parse_crop_box(sc.get("shimmer_box"), f"scenes[{idx_s}].shimmer_box")
 
         # Validate positive timing floats
         for num_field, min_val in (
             ("blink_interval", 0.1),
+            ("blink_delay", 0.0),
+            ("blink_duration", 0.05),
+            ("cat_breath_amp", 0.0),
+            ("cat_breath_period", 0.5),
+            ("cat_twitch_interval", 0.5),
+            ("cat_twitch_delay", 0.0),
             ("beats_per_frame", 0.1),
             ("frame_fps", 0.1),
             ("fg_scale", 0.05),
@@ -1900,13 +2093,16 @@ def compile_timeline(
                 f"Scene {idx_s} must specify at least one visual asset ('scene_video', 'scene_image', 'scene_frames', 'sticker', or 'frames')"
             )
 
-        # Auto-guard against stale blink frame when user replaces primary keyframe with external Banana 2.5 image
+        # Auto-guard against stale blink frame(s) when user replaces primary keyframe with external Banana 2.5 image
         if not raw_scene_video and sc.get("frame_mode") == "natural_blink" and len(raw_scene_list) >= 2:
             p0 = resolve_asset_path(str(raw_scene_list[0]), base_dir, skill_dir)
             try:
-                p1 = resolve_asset_path(str(raw_scene_list[1]), base_dir, skill_dir)
-                if p0.stat().st_mtime > p1.stat().st_mtime + 2.0:
-                    raw_scene_list = [raw_scene_list[0]]
+                p0_mtime = p0.stat().st_mtime
+                for raw_sec in raw_scene_list[1:]:
+                    ps = resolve_asset_path(str(raw_sec), base_dir, skill_dir)
+                    if p0_mtime > ps.stat().st_mtime + 2.0:
+                        raw_scene_list = [raw_scene_list[0]]
+                        break
             except FileNotFoundError:
                 raw_scene_list = [raw_scene_list[0]]
 
@@ -2027,6 +2223,9 @@ def compile_timeline(
             "_vis_src": vis_src,
             "_primary_scene_id": primary_scene_id,
             "_crop_box": crop_box,
+            "_cat_box": cat_box,
+            "_cat_ear_box": cat_ear_box,
+            "_shimmer_box": shimmer_box,
             "_shot_grade": shot_grade,
             "_video_clip": video_clip,
             "_master_frames": master_frames,
@@ -2122,6 +2321,7 @@ def render_video(
             bokeh_teal=_build_bokeh_orb(52, theme.accent_secondary, alpha=32),
             steam_puff=_build_steam_puff(),
             sunbeam=_build_sunbeam_sprite(),
+            mist_band=_build_mist_band(),
             grain_tiles=_build_grain_tiles(4),
             motes=[
                 (
@@ -2145,12 +2345,22 @@ def render_video(
             ],
             rain_drops=[
                 (
-                    rng.uniform(60, WIDTH - 60),
+                    rng.uniform(40, WIDTH - 40),
                     rng.uniform(0, HEIGHT),
-                    rng.uniform(260, 520),
-                    rng.uniform(28, 62),
+                    rng.uniform(280, 560),
+                    rng.uniform(24, 68),
                 )
-                for _ in range(20)
+                for _ in range(34)
+            ],
+            dust_seeds=[
+                (
+                    rng.uniform(60, WIDTH - 60),
+                    rng.uniform(180, HEIGHT - 180),
+                    rng.uniform(2.0, 4.4),
+                    rng.uniform(0.35, 0.95),
+                    rng.uniform(0, 2 * math.pi),
+                )
+                for _ in range(24)
             ],
         )
         font_tag = load_font(resolved_font, 28)

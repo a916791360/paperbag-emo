@@ -1,0 +1,254 @@
+{
+  "bpm": 72,
+  "theme": "late_night",
+  "style": "cinema_emo",
+  "hud": "none",
+  "underline": true,
+  "tag": "深夜纸袋人 · 没有好好道别",
+  "transition_sec": 0.54,
+  "scenes": [
+    {
+      "beats": 6.0,
+      "scene_image": "studio/scenes/daobie/s1_quiet_fade_overpass.jpg",
+      "lines": [
+        "最后的最后，没有好好道别，",
+        "就这样慢慢淡出彼此的生活。"
+      ],
+      "highlight": ["没有好好道别", "慢慢淡出"],
+      "camera": "push_in",
+      "light_pos": "auto",
+      "cat_pos": [0.82, 0.74],
+      "cat_box": [0.73, 0.68, 0.93, 0.82],
+      "cat_ear_box": [0.74, 0.67, 0.85, 0.74],
+      "cat_breath_amp": 0.025,
+      "cat_breath_period": 3.0,
+      "cat_twitch_delay": 1.6,
+      "cat_twitch_interval": 3.8,
+      "mist_y": 0.54,
+      "fx": ["mist_drift", "bokeh_depth", "film_grain"],
+      "text_anim": "typewriter_beat",
+      "text_pos": "top",
+      "text_y": 380
+    },
+    {
+      "beats": 5.0,
+      "scene_image": "studio/scenes/daobie/s2_no_identity_phone.jpg",
+      "lines": [
+        "我心里依旧放不下你，",
+        "只是再也没有身份去打扰。"
+      ],
+      "highlight": ["放不下你", "没有身份去打扰"],
+      "camera": "pan_right",
+      "transition": "luma_fade",
+      "prop_pos": [0.46, 0.72],
+      "prop_color": "teal",
+      "cursor_pos": [0.502, 0.803],
+      "cursor_angle": 38.4,
+      "cursor_len": 29,
+      "cursor_width": 4,
+      "cursor_color": "dark",
+      "fx": ["cursor_blink", "prop_pulse", "dust_drift", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top",
+      "text_y": 370
+    },
+    {
+      "beats": 5.5,
+      "scene_frames": [
+        "studio/scenes/daobie/s3_crowd_drifting_apart.jpg",
+        "studio/scenes/daobie/s3_crowd_drifting_apart_half_blink.jpg",
+        "studio/scenes/daobie/s3_crowd_drifting_apart_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 4.2,
+      "blink_delay": 1.65,
+      "blink_duration": 0.25,
+      "lines": [
+        "遇见你是我很珍贵的经历，",
+        "人海里相遇，又悄悄走散。"
+      ],
+      "highlight": ["很珍贵的经历", "悄悄走散"],
+      "camera": "drift_diag",
+      "transition": "luma_fade",
+      "light_pos": "auto",
+      "cat_pos": [0.75, 0.86],
+      "cat_box": [0.69, 0.81, 0.83, 0.92],
+      "cat_ear_box": [0.69, 0.81, 0.77, 0.86],
+      "cat_breath_amp": 0.024,
+      "cat_breath_period": 2.8,
+      "cat_twitch_delay": 1.0,
+      "cat_twitch_interval": 3.6,
+      "mist_y": 0.62,
+      "shimmer_box": [0.22, 0.70, 0.68, 0.94],
+      "fx": ["rain_glass", "mist_drift", "water_shimmer", "bokeh_depth", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top",
+      "text_y": 340
+    },
+    {
+      "beats": 4.5,
+      "scene_frames": [
+        "studio/scenes/daobie/s3_crowd_drifting_apart.jpg",
+        "studio/scenes/daobie/s3_crowd_drifting_apart_half_blink.jpg",
+        "studio/scenes/daobie/s3_crowd_drifting_apart_blink.jpg"
+      ],
+      "crop_box": [0.22, 0.16, 0.96, 0.90],
+      "frame_mode": "natural_blink",
+      "blink_interval": 4.2,
+      "blink_delay": 1.55,
+      "blink_duration": 0.26,
+      "lines": [
+        "我不知道多久才能释怀，",
+        "或许永远都忘不掉。"
+      ],
+      "highlight": ["多久才能释怀", "永远都忘不掉"],
+      "camera": "push_in",
+      "transition": "camera_morph",
+      "light_pos": "auto",
+      "fx": ["rain_glass", "bokeh_depth", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top",
+      "text_y": 320
+    },
+    {
+      "beats": 5.0,
+      "scene_frames": [
+        "studio/scenes/daobie/s4_midnight_ache_bedside.jpg",
+        "studio/scenes/daobie/s4_midnight_ache_bedside_half_blink.jpg",
+        "studio/scenes/daobie/s4_midnight_ache_bedside_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 4.4,
+      "blink_delay": 1.75,
+      "blink_duration": 0.26,
+      "lines": [
+        "那些心动、想念，",
+        "夜里偷偷的难过全都是真的。"
+      ],
+      "highlight": ["偷偷的难过", "全都是真的"],
+      "camera": "pan_left",
+      "transition": "luma_fade",
+      "light_pos": "auto",
+      "cat_pos": [0.47, 0.73],
+      "cat_box": [0.35, 0.67, 0.62, 0.83],
+      "cat_ear_box": [0.36, 0.66, 0.50, 0.74],
+      "cat_breath_amp": 0.026,
+      "cat_breath_period": 2.9,
+      "cat_twitch_delay": 0.95,
+      "cat_twitch_interval": 3.5,
+      "fx": ["dust_drift", "purr_waves", "film_grain"],
+      "text_anim": "typewriter_beat",
+      "text_pos": "top",
+      "text_y": 360
+    },
+    {
+      "beats": 5.5,
+      "scene_frames": [
+        "studio/scenes/daobie/s4_midnight_ache_bedside.jpg",
+        "studio/scenes/daobie/s4_midnight_ache_bedside_half_blink.jpg",
+        "studio/scenes/daobie/s4_midnight_ache_bedside_blink.jpg"
+      ],
+      "crop_box": [0.06, 0.12, 0.80, 0.86],
+      "frame_mode": "natural_blink",
+      "blink_interval": 4.4,
+      "blink_delay": 1.85,
+      "blink_duration": 0.26,
+      "lines": [
+        "故事收尾得很安静，",
+        "我没有放下，只是学会了克制。"
+      ],
+      "highlight": ["没有放下", "学会了克制"],
+      "camera": "breathe",
+      "transition": "camera_morph",
+      "light_pos": "auto",
+      "cat_box": [0.35, 0.67, 0.62, 0.83],
+      "cat_breath_amp": 0.026,
+      "cat_breath_period": 2.9,
+      "fx": ["dust_drift", "film_grain"],
+      "text_anim": "slam_center",
+      "text_pos": "top",
+      "text_y": 330
+    },
+    {
+      "beats": 4.5,
+      "scene_frames": [
+        "studio/scenes/daobie/s5_keep_ache_alone_bench.jpg",
+        "studio/scenes/daobie/s5_keep_ache_alone_bench_half_blink.jpg",
+        "studio/scenes/daobie/s5_keep_ache_alone_bench_blink.jpg"
+      ],
+      "frame_mode": "natural_blink",
+      "blink_interval": 4.2,
+      "blink_delay": 1.50,
+      "blink_duration": 0.26,
+      "lines": [
+        "你是我很认真爱过的人，",
+        "这段相遇我不后悔。"
+      ],
+      "highlight": ["很认真爱过", "不后悔"],
+      "camera": "push_in",
+      "transition": "warm_dissolve",
+      "light_pos": "auto",
+      "cat_pos": [0.72, 0.79],
+      "cat_box": [0.61, 0.73, 0.83, 0.86],
+      "cat_breath_amp": 0.026,
+      "cat_breath_period": 2.8,
+      "shimmer_box": [0.76, 0.62, 0.99, 0.76],
+      "fx": ["lamp_flicker", "dust_drift", "water_shimmer", "bokeh_depth", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top",
+      "text_y": 310
+    },
+    {
+      "beats": 5.5,
+      "scene_frames": [
+        "studio/scenes/daobie/s5_keep_ache_alone_bench.jpg",
+        "studio/scenes/daobie/s5_keep_ache_alone_bench_half_blink.jpg",
+        "studio/scenes/daobie/s5_keep_ache_alone_bench_blink.jpg"
+      ],
+      "crop_box": [0.10, 0.16, 0.86, 0.92],
+      "frame_mode": "natural_blink",
+      "blink_interval": 4.4,
+      "blink_delay": 1.80,
+      "blink_duration": 0.26,
+      "lines": [
+        "往后不会再打扰你的生活，",
+        "想念和心酸我自己收下。"
+      ],
+      "highlight": ["不会再打扰", "我自己收下"],
+      "camera": "drift_diag",
+      "transition": "camera_morph",
+      "light_pos": "auto",
+      "cat_box": [0.61, 0.73, 0.83, 0.86],
+      "cat_breath_amp": 0.026,
+      "cat_breath_period": 2.8,
+      "fx": ["lamp_flicker", "dust_drift", "film_grain"],
+      "text_anim": "beat_lines",
+      "text_pos": "top",
+      "text_y": 310
+    },
+    {
+      "beats": 5.5,
+      "scene_image": "studio/scenes/daobie/s6_bright_road_ahead_dawn.jpg",
+      "lines": [
+        "或许没有我，你会过得更好，",
+        "愿你前路坦荡，平安喜乐。"
+      ],
+      "highlight": ["前路坦荡", "平安喜乐"],
+      "camera": "pull_out",
+      "transition": "warm_dissolve",
+      "light_pos": "auto",
+      "cat_pos": [0.61, 0.90],
+      "cat_box": [0.54, 0.85, 0.70, 0.96],
+      "cat_ear_box": [0.54, 0.85, 0.64, 0.91],
+      "cat_breath_amp": 0.026,
+      "cat_breath_period": 2.9,
+      "cat_twitch_delay": 1.4,
+      "cat_twitch_interval": 3.6,
+      "mist_y": 0.64,
+      "fx": ["sunbeams", "dust_drift", "mist_drift", "bokeh_depth", "film_grain"],
+      "text_anim": "slam_center",
+      "text_pos": "top",
+      "text_y": 380
+    }
+  ]
+}

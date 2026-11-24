@@ -27,7 +27,9 @@
 - **适用场景**：日更走量、零视频生成成本的抖音 / 视频号 / 小红书深夜情绪短片与金句独白。
 - **核心能力**：你只需给出一段文案，Agent 自动完成**「一文案一分镜」导演拆解**并输出适配 Gemini Nano Banana 2.5 / Midjourney / 即梦的中英文 `Prompt Pack`；把生好的 **4–6 张静态母图** 交给 Agent 后，由本地渲染引擎 [scripts/render_emo_video.py](scripts/render_emo_video.py) 全自动合成：
   - **无重影 2.5D 平滑推镜（`camera_morph`）**：相邻两幕复用同一母图做 B 机位特写时，自动启用视口平滑插值推轨，100% 根除普通 `crossfade` 叠化导致的「双头重影」；
-  - **精准瞳孔眨眼与微动态**：自动定位圆框眼镜内瞳孔生成自然闭眼帧（`natural_blink`，首镜 `0.38s` 触发首次眨眼），叠加暖光源自动追踪（`light_pos: "auto"`）、雨丝、热气、散景与胶片颗粒；
+  - **自然低频 5 阶平滑眨眼（`natural_blink`）**：支持 3 帧序列（睁眼 → 半眯过渡帧 → 轻闭眼 → 半眯 → 睁眼）与可调低频节奏（默认 `blink_interval: 3.8s`、`blink_delay: 1.45s`、`blink_duration: 0.24s`），彻底告别硬切与高频抢拍；
+  - **小猫局部微动态与像素锁死动效**：在源图空间内支持小猫底部锚定轻呼吸起伏（`cat_box`）与错拍轻抖耳（`cat_ear_box`），以及随镜头推拉零漂移的手机空白输入框闪烁光标（`cursor_blink`）；
+  - **电影级多维氛围层**：内置暖光源自动追踪（`light_pos: "auto"`）、分层景深雨丝（`rain_glass`）、水平慢漂夜雾（`mist_drift`）、逆光暖金微尘（`dust_drift`）、水面/湿路微光涟漪（`water_shimmer`）、热气、散景与 16mm 胶片颗粒；
   - **第 0 帧封面标题与发光字幕**：第 0 帧（`t = 0.00s`）自动渲染完整首句标题与手绘琥珀下划线，解决抖音默认封面无字痛点；提供 `60px` 衬线逐字级联与解耦转场。
 
 ### 方式三｜图生视频 → 最终精剪合成：真动画电影级封装（Mode C 2.0 · Live Anime & Hybrid）
@@ -142,7 +144,7 @@ python3 scripts/cutout.py source.jpg assets/stickers/new_pose.png \
   --non-key-opaque-threshold 115
 ```
 
-### 5. 运行单元测试（16 项自动化校验）
+### 5. 运行单元测试（18 项自动化校验）
 
 ```bash
 python3 -m unittest discover -s tests -v
@@ -166,6 +168,7 @@ python3 -m unittest discover -s tests -v
 ├── studio/
 │   ├── ziji_timeline.json             # Mode C 2.0 真动画示例：《我会救自己千千万万次》（+ ziji_prompt_pack.md）
 │   ├── yihan_timeline.json            # Mode C 2.0 真动画示例：《爱情里的两种遗憾》（+ yihan_prompt_pack.md）
+│   ├── daobie_timeline.json           # Mode C 静帧升级示例：《没有好好道别》（5阶眨眼+小猫微动+夜雾/闪烁光标）
 │   ├── zhufu_timeline.json            # Mode C 静帧示例：《我总是祝福着你》（+ zhufu_prompt_pack.md）
 │   ├── ganxie_timeline.json           # Mode C 静帧示例：《感谢那位特殊的人》（+ ganxie_prompt_pack.md）
 │   ├── sanqian_timeline.json          # Mode C 静帧示例：《三千梨树六百湘水》（+ sanqian_prompt_pack.md）

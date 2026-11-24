@@ -238,6 +238,44 @@ class TestCompileAndValidateTimeline(unittest.TestCase):
                 bad = {**data, "scenes": [{**data["scenes"][0], "video_loop": "invalid_mode"}]}
                 rev.compile_timeline(bad, self.base_dir, self.skill_dir, load_images=False)
 
+    def test_smooth_three_frame_natural_blink_and_delay(self) -> None:
+        f_open = Image.new("RGBA", (8, 8), (10, 10, 10, 255))
+        f_half = Image.new("RGBA", (8, 8), (120, 120, 120, 255))
+        f_closed = Image.new("RGBA", (8, 8), (240, 240, 240, 255))
+        sc = {"frame_mode": "natural_blink", "blink_interval": 4.0, "blink_delay": 1.5, "blink_duration": 0.24}
+        frames = [f_open, f_half, f_closed]
+        # Before blink_delay: stays open
+        self.assertIs(rev._pick_frame_from_list(frames, sc, 0.0, 0.0), f_open)
+        self.assertIs(rev._pick_frame_from_list(frames, sc, 1.4, 1.8), f_open)
+        # 5-stage sequence: open -> half -> closed -> half -> open
+        self.assertIs(rev._pick_frame_from_list(frames, sc, 1.52, 2.0), f_half)
+        self.assertIs(rev._pick_frame_from_list(frames, sc, 1.60, 2.1), f_closed)
+        self.assertIs(rev._pick_frame_from_list(frames, sc, 1.70, 2.2), f_half)
+        self.assertIs(rev._pick_frame_from_list(frames, sc, 1.80, 2.3), f_open)
+
+    def test_local_micro_motion_cat_breath_twitch_and_cursor(self) -> None:
+        base_img = Image.new("RGBA", (200, 200), (20, 30, 40, 255))
+        px = base_img.load()
+        for y in range(120, 180):
+            for x in range(110, 170):
+                px[x, y] = (180, 140, 100, 255)
+        sc = {
+            "_cat_box": (0.50, 0.55, 0.90, 0.95),
+            "_cat_ear_box": (0.55, 0.55, 0.85, 0.72),
+            "cat_breath_period": 2.0,
+            "cat_breath_amp": 0.04,
+            "cat_twitch_delay": 1.0,
+            "cat_twitch_interval": 3.0,
+            "fx": ["cursor_blink"],
+            "cursor_pos": [0.25, 0.25],
+            "cursor_color": "amber",
+            "cursor_len": 20,
+        }
+        out = rev._apply_local_micro_motion(base_img, sc, local_t=1.06, t=1.06)
+        self.assertEqual(out.size, base_img.size)
+        # Cursor should have painted bright amber pixel near (50, 50)
+        self.assertGreater(out.getpixel((50, 50))[0], 150)
+
 
 class TestCutoutPipeline(unittest.TestCase):
     def test_preserves_kraft_and_charcoal_opacity_and_removes_green_screen(self) -> None:
