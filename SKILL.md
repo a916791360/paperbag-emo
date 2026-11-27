@@ -11,11 +11,17 @@ Create raster visuals, reusable transparent assets, and beat-synced explainer ti
 
 ### Mode A — explanatory image
 
-Use when the image itself must communicate an emotion, concept, mechanism, comparison, or reflection in about 10 seconds without external layout text.
+Use when the image itself must communicate an emotion, concept, mechanism, comparison, or reflection in about 10 seconds without external layout text. Choose one of two Mode A tracks before drafting the brief:
 
-- Deliver a complete PNG or WebP (or 9:16 vertical / 1:1 square frame) with a finished off-white textured paper or muted dark-slate night scene.
+- **Track A1 — Emotion / Insight (`情绪与观点解释图`)**: communicates a personal mood shift, life contrast, or concise reflection using warm-amber vs. muted-slate-teal lighting contrast on off-white paper or muted dark-slate night backdrop.
+- **Track A2 — Knowledge / Mechanism (`知识与机制解说图`)**: explains a technical, scientific, cognitive, or workflow concept through concrete physical mechanisms (`Input -> Mechanism/Barrier -> Result`) inside a grounded off-white lightly textured real environment (real desk/floor planes and 2–4 studio/study cues — never floating props on a blank canvas).
+
+Shared Mode A rules:
+
+- Deliver a complete PNG or WebP (e.g. `3:4` vertical / `1:1` square / `9:16` vertical) with a finished real environment.
 - Generate every essential title and label directly inside the bitmap.
-- Make the relation or emotional contrast visible through objects, lighting, paths, states, or repeated materials; labels identify the evidence but do not replace it.
+- Make the relation or mechanism visible through real objects, lighting, paths, barriers, trays, gauges, or states; labels identify the evidence but do not replace it.
+- In Track A2 (knowledge explainers), anchor EVERY title and label physically onto a **diegetic in-scene surface** (framed riveted wall signboard, desk nameplate, tray front, wall plaque, recessed base plate, pointer tag, or meter dial) — **never leave bare text floating in empty whitespace**.
 - Do not generate an unlabeled base and add essential words in a separate rendering step.
 
 ### Mode B — transparent illustration
@@ -47,8 +53,13 @@ If the destination is unclear, choose Mode A when the single image must communic
 - For object-only artwork (e.g., desk lamp, ceramic mug, notebook, umbrella, clock, hourglass, stars), carry the exact same style through clear silhouettes, varied ink line weight, circular halftone shading, and simple material details. Do not add a person, cat, or face to make an object feel on-brand.
 - When characters are present in Mode A concept explainers, keep them secondary to the visual evidence or action unless the character's emotional state is the requested subject.
 - Color discipline:
-  - Base: charcoal ink black, kraft paper brown, off-white, slate/halftone gray.
-  - At most **two muted emotional/semantic accent colors**: **warm amber-yellow** (desk lamp glow, warmth, hope, key insight) and **muted slate-teal** (night atmosphere, calm, solitude, input/context).
+  - Base: charcoal ink black, kraft paper brown (when Paperbag appears), off-white, slate/halftone gray.
+  - **Track A1 (emotion/insight), Mode B, and Mode C**: at most **two muted emotional/semantic accent colors** — **warm amber-yellow** (desk lamp glow, warmth, hope, key insight) and **muted slate-teal** (night atmosphere, calm, solitude, shadow/context).
+  - **Track A2 (Mode A knowledge/mechanism explainers)**: keep the exact same charcoal ink, off-white textured paper, and circular halftone base, and pick **at most two muted editorial state colors** per image from this 4-role semantic dictionary (plus optional small warm-amber lamp bulb glow when a lamp is present) so multi-stage mechanics never collide semantically:
+    - **muted slate-blue / slate-teal** = input, incoming items, raw sample pool, context
+    - **muted terracotta-orange** = overflow, warning, blocking, bottleneck, cost
+    - **muted sage-green** = cleared survivor, successful output, healthy state
+    - **warm amber-yellow** = spotlight, active focus, key insight
 - Avoid 3D rendering, glossy plastic gradients, photorealism, wobbly sketch lines, generic card grids, dashboards, unrelated clutter, white die-cut sticker outlines, and watermarks.
 
 ## Mode A workflow — explanatory image
@@ -56,23 +67,25 @@ If the destination is unclear, choose Mode A when the single image must communic
 ### 1. Write the visual brief
 
 ```text
+track: emotion_insight | knowledge_mechanism
 viewer_question: what should be understood or felt in 10 seconds?
-concrete_claim: one-sentence conclusion or emo insight
-real_objects: visible objects, lamps, mugs, desks, notebooks, paths, or states
-relation: contrast, transformation, causality, sequence, tradeoff, or emotional shift
+concrete_claim: one-sentence conclusion or mechanism insight
+input_mechanism_result: input -> action/barrier/process -> outcome/tradeoff (required for knowledge_mechanism)
+real_objects: visible physical objects, trays, desks, sockets, barriers, gauges, lamps, or states
+relation: contrast, transformation, causality, sequence, bottleneck, filtering, tradeoff, or emotional shift
 visual_evidence: what remains understandable when all labels are ignored?
-scene: believable setting (off-white paper or muted late-night slate) + 2–4 environmental cues
-semantic_colors: warm amber vs. muted teal role assignment
-labels: exact short Chinese/English strings plus the evidence surface for each label
+scene: grounded real setting with desk/floor horizon plane + 2–4 environmental cues (bookshelf, pendant lamp, pegboard, mug on desk corner, halftone cast shadows)
+semantic_colors: non-colliding muted accent role assignment (at most 2 state colors)
+labels: exact short Chinese/English strings + explicit diegetic physical carrier surface for each label
 ```
 
-Keep one dominant focal action and no more than three major visual regions. For comparisons or multi-step progressions, use a clean left-to-right or top-to-bottom sequence.
+Keep one dominant focal action and no more than three major visual regions. For knowledge explainers, explicitly show **input, mechanism/relation, and result** in a clean left-to-right, right-to-left, or top-to-bottom physical path, using directional arrows, impact/bounce marks, boundary stoppers, or gauges where helpful. When Paperbag or Black Cat appears in Track A2, keep their visual footprint balanced so they support — rather than crowd out — the mechanism.
 
-### 2. Design the labels
+### 2. Design the labels (Diegetic Surface Rule)
 
 - Prefer 2–6 labels. Use more only when the explanation truly needs them.
-- Keep each label short and concrete: role, action, state, or emotion.
-- Place every label on or immediately beside its evidence surface (such as a notebook cover, sticky note, coffee cup, sign, lane, or divider).
+- Keep each label short and concrete: concept title, role, action, state, or outcome.
+- **Diegetic carrier iron rule (mandatory for `knowledge_mechanism`)**: Place every title and label **physically onto an in-scene evidence surface** — such as a framed riveted wall signboard, desk nameplate, inbox tray front, mounted barrier plaque, recessed machine/base plate, colored pointer tag, folder tab, or meter dial. **Do NOT float bare text in blank background margin.**
 - Use modern Chinese sans-serif typography, medium or bold, large enough to read cleanly at mobile display size.
 - Do not turn long paragraphs, tables, or dense copy into image text. Use deterministic layout or Mode C kinetic typography when multi-line copy is required.
 
@@ -83,26 +96,30 @@ Text (verbatim): Render these exact labels as part of the bitmap illustration:
 "<label 1>", "<label 2>", "<label 3>".
 Use each phrase exactly once. Do not translate, paraphrase, misspell, repeat,
 or add any other text. Use modern sans-serif medium/bold typography, large
-and readable. Place "<label 1>" on <evidence surface>; place "<label 2>" on
-<evidence surface>; place "<label 3>" on <evidence surface>.
+and readable. Mount "<label 1>" on <diegetic surface>; mount "<label 2>" on
+<diegetic surface>; mount "<label 3>" on <diegetic surface>. Do not float bare
+text in empty whitespace.
 ```
 
 ### 3. Build the prompt
 
 Use this order:
 
-1. Attach `assets/master_ref.jpg` as visual reference whenever the Paperbag protagonist or Black Cat appears.
-2. State the concrete claim and shared scene task.
-3. Describe the real setting, selected subjects (protagonist alone, cat alone, both, or object-only), and action.
-4. Describe the evidence objects and their geometry: split, balanced, connected, contrasting, or transforming.
-5. Assign semantic colors (warm amber vs. muted slate-teal).
-6. Quote the exact labels and specify each placement surface.
+1. Attach `assets/master_ref.jpg` as character reference whenever the Paperbag protagonist or Black Cat appears. For Track A2 (`knowledge_mechanism`), you may also reference the canonical Mode A benchmarks in `examples/` for diegetic plaque styling, grounded workshop depth, and non-colliding state colors:
+   - `examples/mode_a_context_window.png` (dual-character workbench pipeline)
+   - `examples/mode_a_caffeine_mechanism.png` (object-only scientific blocking cross-section)
+   - `examples/mode_a_survivorship_bias.png` (single-character barrier + spotlight contrast)
+2. State the concrete claim, Mode A track (`emotion_insight` or `knowledge_mechanism`), and `Input -> Mechanism -> Result` visual task.
+3. Describe the grounded real setting (desk/floor horizon plane + 2–4 subtle environmental cues), selected subjects (protagonist alone, cat alone, both, or strictly object-only), and primary action.
+4. Describe the evidence objects and physical mechanics: sliding displacement, sockets/plugs, barrier wall with impact bursts, inbox/outbox trays, boundary ledges, motion arrows, or meters.
+5. Assign non-colliding muted semantic colors (max 2 state colors).
+6. Quote the exact labels and specify each **diegetic physical carrier surface**.
 7. Add the Mode A style anchor.
 
 Mode A style anchor:
 
 ```text
-Professional editorial manga/comic ink illustration matching the character design and linework of the reference image. Clean confident charcoal-black ink outlines with varied line weights, expressive but controlled. Use classic circular halftone screentone for gray and shadow areas, with subtle tactile paper grain. Render only the selected characters or objects; do not add the Paperbag protagonist or black cat automatically. Use a finished off-white lightly textured paper or muted slate-teal night environment, not a blank sterile canvas. Typography is modern sans-serif, medium or bold, large and readable. Color is restrained: black, white, halftone gray, kraft-brown, warm amber-yellow, and muted slate-teal (at most two accent colors). No 3D, no glossy gradients, no photorealism, no generic card grid, no dashboard, no unrelated clutter, no tiny text, no long paragraphs, no watermark.
+Professional editorial manga/comic ink illustration matching the character design and linework of the reference image. Clean confident charcoal-black ink outlines with varied line weights, expressive but controlled. Use classic circular halftone screentone for gray and shadow areas, with subtle tactile paper grain. Render only the selected characters or objects; do not add the Paperbag protagonist or black cat automatically. Use a grounded, finished off-white lightly textured real environment with desk/floor planes, subtle studio/study cues, and halftone cast shadows (or muted slate-teal night atmosphere for emotion pieces) — never isolated objects floating on a blank white canvas. Mount titles and labels physically onto diegetic in-scene surfaces (framed riveted wall signboards, desk nameplates, tray fronts, mounted plaques, or pointer tags) rather than floating bare text in empty margins. Typography is modern sans-serif, medium or bold, large and readable. Color is restrained: charcoal black, off-white, halftone gray, kraft-brown when Paperbag appears, plus at most two muted editorial semantic accent colors (and optional small warm-amber lamp glow). No 3D, no glossy gradients, no photorealism, no generic card grid, no dashboard, no unrelated clutter, no tiny text, no long paragraphs, no watermark.
 ```
 
 ### 4. Inspect and retry
@@ -273,8 +290,10 @@ For every output:
 
 For Mode A:
 - One claim, one focal action, and at most three visual regions.
-- Visual evidence communicates the relation even if labels are ignored.
-- Every required label is exact, appears once, and sits cleanly on its evidence surface.
+- Visual evidence communicates the relation (`Input -> Mechanism -> Result` for knowledge explainers) even if labels are ignored.
+- Grounded real environment with desk/floor planes and 2–4 subtle environmental cues (never isolated floating objects on a sterile white canvas).
+- Every required label is exact, appears once, and sits physically on a diegetic in-scene carrier (signboard, nameplate, tray, plaque, or pointer tag — no bare floating text in empty whitespace for knowledge explainers).
+- Non-colliding muted semantic colors (at most two state colors per image).
 
 For Mode B:
 - Real RGBA transparency with clean edges, no white die-cut border, no chroma spill, and fully opaque character/object interiors.

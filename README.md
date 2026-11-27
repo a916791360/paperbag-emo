@@ -15,9 +15,12 @@
 
 ### 方式一｜图片创作：做解释图 & 可复用透明素材（Mode A / Mode B）
 
-- **Mode A — 概念 / 机制 / 情绪一图流解释图（Explanatory Image）**
-  - **适用场景**：公众号文章配图、小红书干货/情绪图文、产品机制拆解、双态对比图。
-  - **核心能力**：先产出 8 字段结构化 `Visual Brief`，再以 `Text (verbatim)` 逐字锁定中英文标签直接成图；通过真实物件、光影对比与清晰路径（1 个核心动作、至多 3 个视觉区块），让读者在 **10 秒内看懂一个概念或情绪转折**。
+- **Mode A — 概念 / 机制 / 情绪一图流解释图（Explanatory Image · v2 双轨升级）**
+  - **适用场景**：公众号文章配图、小红书与朋友圈硬核科普/情绪图文、AI Agent 工程机制拆解、双态对比图。
+  - **核心能力（Track A1 情绪观点 + Track A2 知识机制双轨）**：
+    - **实体标签铁律（Diegetic Labels）**：知识机制图禁止悬空裸字，标题与关键标签全部挂载于真实画内物理载体（带铆钉墙牌、桌面立牌、托盘正面、底座铭牌、指向标签卡），大幅提升信息图专业度；
+    - **4 色低饱和状态词典（单图严控至多 2 色）**：在保留炭笔黑 + 牛皮纸棕 + 圆形半调基底的前提下，按需组合冷灰蓝（输入/原始样本）、陶土橙（溢出/阻塞/告警）、雾灰绿（筛出/达标结果）、暖琥珀（聚光灯/焦点），避免多阶段机制语义撞色；
+    - **`Input → Mechanism → Result` 骨架与实景微缩工坊**：先产出结构化 `Visual Brief`，再以 `Text (verbatim)` 逐字锁定中英文标签，用真实书桌/隔离舱/表盘/地平线投影让读者在 **10 秒内看懂一个复杂机制**。
 - **Mode B — 无白边可复用透明插画资产（Transparent RGBA PNG）**
   - **适用场景**：IP 头像、PPT 演讲插图、视频前景贴纸、封面与海报排版。
   - **核心能力**：支持单独绘制**纸袋人**、**慵懒黑猫**、**二者组合**或**纯炭笔墨线独立物件**。配合内置抠图脚本 [scripts/cutout.py](scripts/cutout.py) 去绿幕（`#00FF00` / `#FF00FF`）与去色溢处理，专门保护暖棕牛皮纸袋与炭黑卫衣不透光（`--non-key-opaque-threshold 115`），**无白色贴纸描边**。
@@ -43,9 +46,17 @@
 
 ---
 
-## 视频成片效果一览（Mode C 2.0 真动画 & Mode C 静帧电影）
+## 成片效果一览（Mode A 知识解释图 & Mode C 2.0 真动画 / 静帧电影）
 
-### 1. Mode C 2.0 真动画旗舰案例：《我会救自己千千万万次》（5 段 Gemini I2V 动态视频 → 8 幕精剪 · 78 BPM · 27.31s）
+### 1. Mode A v2 知识机制解释图案例：《AI Agent 上下文工程三部曲》（纸袋人 + 黑猫 / 独立隔离工坊）
+
+提示词包：[studio/agent_explainers_prompt_pack.md](studio/agent_explainers_prompt_pack.md) | 基准范例：[mode_a_context_window.png](examples/mode_a_context_window.png) · [mode_a_caffeine_mechanism.png](examples/mode_a_caffeine_mechanism.png) · [mode_a_survivorship_bias.png](examples/mode_a_survivorship_bias.png)
+
+![Mode A v2 Knowledge Explainers - AI Agent Context Engineering](examples/mode_a_knowledge_showcase.jpg)
+
+- **上下文窗口原理**（冷灰蓝输入托盘 → 暖灯可见桌面 → 陶土橙边界挤出，黑猫桌下仰望） → **Agent 上下文腐烂**（左右双工位对比：全程堆日志过载红区表盘 vs 压纸过滤盒压缩交接绿区表盘） → **多 Agent 上下文隔离**（黑猫顶层主控调度 → 3 座厚墙隔离舱锁住脏中间过程 → 底部滤嘴只回传精炼绿卡）。
+
+### 2. Mode C 2.0 真动画旗舰案例：《我会救自己千千万万次》（5 段 Gemini I2V 动态视频 → 8 幕精剪 · 78 BPM · 27.31s）
 
 对应配置：[studio/ziji_timeline.json](studio/ziji_timeline.json) | 双套提示词包：[studio/ziji_prompt_pack.md](studio/ziji_prompt_pack.md)
 
@@ -53,7 +64,7 @@
 
 - **贴地起身睁眼**（精准截取 `4.2s` 起身睁眼片段，避开前段光效穿帮） → **天台冷雨不打伞**（真实雨丝 + 动态 `camera_morph` 推近冷峻眉眼） → **地下长阶拾级而上**（`0.68x` 慢放 + `text_y: 235` 稳嵌隧道暗顶棚，避开脑后镜框闪烁） → **晨光按胸致敬自己**（`camera_morph` 推近睁眼瞬间 + 微笑黑猫）。
 
-### 2. Mode C 静帧漫画电影案例：《三千梨树六百湘水》&《克制与想念 / 产生怜惜》
+### 3. Mode C 静帧漫画电影案例：《三千梨树六百湘水》&《克制与想念 / 产生怜惜》
 
 对应配置：[studio/sanqian_timeline.json](studio/sanqian_timeline.json) | [studio/xiangni_timeline.json](studio/xiangni_timeline.json) | [studio/lianxi_timeline.json](studio/lianxi_timeline.json)
 
@@ -161,7 +172,7 @@ python3 -m unittest discover -s tests -v
 ├── assets/
 │   ├── master_ref.jpg                 # IP 角色基准参考图
 │   └── stickers/                      # 透明动作库（thinking / emo_hug / emo_hug_blink / calm_cup）
-├── examples/                          # GitHub README 成片与分镜展示图（含 Mode C 2.0 真动画案例）
+├── examples/                          # Mode A 知识解释图基准范例 & Mode C / 2.0 成片展示图
 ├── scripts/
 │   ├── cutout.py                      # Mode B 去绿幕与去色溢抠图脚本
 │   └── render_emo_video.py            # Mode C / 2.0 漫画电影与原生动态视频精剪引擎
