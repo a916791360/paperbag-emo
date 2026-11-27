@@ -56,13 +56,13 @@
 
 - **上下文窗口原理**（冷灰蓝输入托盘 → 暖灯可见桌面 → 陶土橙边界挤出，黑猫桌下仰望） → **Agent 上下文腐烂**（左右双工位对比：全程堆日志过载红区表盘 vs 压纸过滤盒压缩交接绿区表盘） → **多 Agent 上下文隔离**（黑猫顶层主控调度 → 3 座厚墙隔离舱锁住脏中间过程 → 底部滤嘴只回传精炼绿卡）。
 
-### 2. Mode C 2.0 真动画旗舰案例：《我会救自己千千万万次》（5 段 Gemini I2V 动态视频 → 8 幕精剪 · 78 BPM · 27.31s）
+### 2. Mode C 2.0 真动画与静帧混剪旗舰案例：《悄无声息的告别》（2 段 I2V 动态视频 + 3 张静帧母图 → 7 幕精剪 · 72 BPM · 26.67s）
 
-对应配置：[studio/ziji_timeline.json](studio/ziji_timeline.json) | 双套提示词包：[studio/ziji_prompt_pack.md](studio/ziji_prompt_pack.md)
+对应配置：[studio/wusheng_timeline.json](studio/wusheng_timeline.json) | 提示词包：[studio/wusheng_prompt_pack.md](studio/wusheng_prompt_pack.md)
 
-![Mode C 2.0 Live Anime Showcase - Ziji](examples/mode_c_live_anime_ziji.jpg)
+![Mode C 2.0 Live Anime Hybrid Showcase - Wusheng](examples/mode_c_live_anime_wusheng.jpg)
 
-- **贴地起身睁眼**（精准截取 `4.2s` 起身睁眼片段，避开前段光效穿帮） → **天台冷雨不打伞**（真实雨丝 + 动态 `camera_morph` 推近冷峻眉眼） → **地下长阶拾级而上**（`0.68x` 慢放 + `text_y: 235` 稳嵌隧道暗顶棚，避开脑后镜框闪烁） → **晨光按胸致敬自己**（`camera_morph` 推近睁眼瞬间 + 微笑黑猫）。
+- **微距琥珀酒杯空镜开场**（零人脸防查重钩子 + 暖灯微尘与景深散景） → **深夜露天车站真动画**（`scene_video` `0.66x` 慢放 + `mist_drift` 夜雾，拉杆箱旁落泪与仰望黑猫） → **寻常街角最后一面真动画**（`scene_video` 路人渐远 + 动态 `camera_morph` 无重影推近特写） → **同城深夜江畔波光终章**（`water_shimmer` 江面灯火涟漪 + 黑猫错拍轻抖耳与 `warm_dissolve` 释然收尾）。
 
 ### 3. Mode C 静帧漫画电影案例：《三千梨树六百湘水》&《克制与想念 / 产生怜惜》
 
@@ -177,6 +177,7 @@ python3 -m unittest discover -s tests -v
 │   ├── cutout.py                      # Mode B 去绿幕与去色溢抠图脚本
 │   └── render_emo_video.py            # Mode C / 2.0 漫画电影与原生动态视频精剪引擎
 ├── studio/
+│   ├── wusheng_timeline.json          # Mode C 2.0 真动画混剪旗舰示例：《悄无声息的告别》（+ wusheng_prompt_pack.md）
 │   ├── ziji_timeline.json             # Mode C 2.0 真动画示例：《我会救自己千千万万次》（+ ziji_prompt_pack.md）
 │   ├── yihan_timeline.json            # Mode C 2.0 真动画示例：《爱情里的两种遗憾》（+ yihan_prompt_pack.md）
 │   ├── daobie_timeline.json           # Mode C 静帧升级示例：《没有好好道别》（5阶眨眼+小猫微动+夜雾/闪烁光标）
